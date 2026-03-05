@@ -11,6 +11,9 @@ access(all) contract FloatsTabManager {
     // Dictionary tracking total accrued yield per merchant
     access(all) var merchantYields: {String: UFix64}
 
+    // Single-sponsor tracking for the Hackathon MVP (FIFO assumption)
+    access(all) var activeSponsors: {String: Address}
+
     // Registry tracking the actual locked funds for claimed floats
     // Structure: activeFloats[merchantID][claimerAddress] = FloatData
     access(all) var activeFloats: {String: {Address: FloatData}}
@@ -40,12 +43,15 @@ access(all) contract FloatsTabManager {
     }
 
     // Admin function to deposit funds into a merchant's Tab
-    access(all) fun deposit(merchantID: String, amount: UFix64) {
+    access(all) fun deposit(merchantID: String, amount: UFix64, sponsorAddress: Address) {
         pre {
             self.merchantBalances[merchantID] != nil: "Tab does not exist for this merchantID"
         }
         // Add the deposited amount to the existing balance and calculate yield
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
+        
+        // Track the sponsor so consumers know who to credit for NFT Impact scores
+        self.activeSponsors[merchantID] = sponsorAddress
     }
 
     // Admin function to toggle the active status of a Tab
@@ -197,5 +203,6 @@ access(all) contract FloatsTabManager {
         self.activeFlags = {}
         self.activeFloats = {}
         self.merchantYields = {}
+        self.activeSponsors = {}
     }
 }

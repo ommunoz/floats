@@ -1,4 +1,5 @@
 import "FloatsTabManager"
+import "PatronageNFT"
 
 transaction(merchantID: String, spentAmount: UFix64) {
 
@@ -20,6 +21,16 @@ transaction(merchantID: String, spentAmount: UFix64) {
         // If this panics (e.g. because it's expired), the entire transaction reverts 
         // and the receipt is put back in user's storage automatically.
         FloatsTabManager.consumeFloat(receipt: <-receipt, spentAmount: spentAmount)
+        
+        // 3. Log the redemption to level up the Active Sponsor's NFT Impact Score
+        if let sponsorAddress = FloatsTabManager.activeSponsors[merchantID] {
+            let sponsorAccount = getAccount(sponsorAddress)
+            if let collectionCap = sponsorAccount.capabilities.get<&{PatronageNFT.CollectionPublic}>(/public/PatronageNFTCollection).borrow() {
+                if let nft = collectionCap.findNFTByMerchant(merchantID: merchantID) {
+                    PatronageNFT.logRedemption(collectionRef: collectionCap, nftID: nft.id)
+                }
+            }
+        }
         
         log("Successfully consumed Float at merchant: ".concat(merchantID))
     }
