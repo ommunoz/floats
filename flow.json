@@ -1,12 +1,12 @@
 {
 	"contracts": {
-    "FloatsTabManager": "./cadence/contracts/FloatsTabManager.cdc",
 		"Counter": {
 			"source": "cadence/contracts/Counter.cdc",
 			"aliases": {
 				"testing": "0000000000000007"
 			}
-		}
+		},
+		"FloatsTabManager": "./cadence/contracts/FloatsTabManager.cdc"
 	},
 	"networks": {
 		"emulator": "127.0.0.1:3569",
@@ -25,6 +25,10 @@
 				"type": "file",
 				"location": "emulator-account.pkey"
 			}
+		},
+		"neighbor": {
+			"address": "179b6b1cb6755e31",
+			"key": "d1b9e8b3e2312f501281816c4038f05534ae0925db04b86494d3c70b5fcd1b87"
 		}
 	},
 	"deployments": {
