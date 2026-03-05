@@ -6,6 +6,7 @@
 				"testing": "0000000000000007"
 			}
 		},
+		"YieldVault": "./cadence/contracts/YieldVault.cdc",
 		"FloatsTabManager": "./cadence/contracts/FloatsTabManager.cdc"
 	},
 	"networks": {
@@ -34,6 +35,7 @@
 	"deployments": {
 		"emulator": {
 			"emulator-account": [
+				"YieldVault",
 				"FloatsTabManager"
 			]
 		}

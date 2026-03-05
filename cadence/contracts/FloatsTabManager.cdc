@@ -1,3 +1,5 @@
+import "YieldVault"
+
 access(all) contract FloatsTabManager {
         
     // Dictionary mapping merchantID to their funded balance
@@ -5,6 +7,9 @@ access(all) contract FloatsTabManager {
     
     // Dictionary mapping merchantID to their active status
     access(all) var activeFlags: {String: Bool}
+
+    // Dictionary tracking total accrued yield per merchant
+    access(all) var merchantYields: {String: UFix64}
 
     // Registry tracking the actual locked funds for claimed floats
     // Structure: activeFloats[merchantID][claimerAddress] = FloatData
@@ -31,6 +36,7 @@ access(all) contract FloatsTabManager {
         self.merchantBalances[merchantID] = 0.0
         self.activeFlags[merchantID] = true
         self.activeFloats[merchantID] = {}
+        self.merchantYields[merchantID] = 0.0
     }
 
     // Admin function to deposit funds into a merchant's Tab
@@ -38,8 +44,8 @@ access(all) contract FloatsTabManager {
         pre {
             self.merchantBalances[merchantID] != nil: "Tab does not exist for this merchantID"
         }
-        // Add the deposited amount to the existing balance
-        self.merchantBalances[merchantID] = self.merchantBalances[merchantID]! + amount
+        // Add the deposited amount to the existing balance and calculate yield
+        self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
     }
 
     // Admin function to toggle the active status of a Tab
@@ -66,6 +72,17 @@ access(all) contract FloatsTabManager {
         return false
     }
 
+    // Helper function to update yield whenever the tab balance changes securely
+    access(contract) fun updateTabBalanceAndYield(merchantID: String, newBalance: UFix64) {
+        let accrued = YieldVault.updatePrincipal(merchantID: merchantID, newPrincipal: newBalance)
+        if self.merchantYields[merchantID] != nil {
+            self.merchantYields[merchantID] = self.merchantYields[merchantID]! + accrued
+        } else {
+            self.merchantYields[merchantID] = accrued
+        }
+        self.merchantBalances[merchantID] = newBalance
+    }
+
     // The Receipt primitive: A non-valuable token proving the user initiated a claim
     access(all) resource FloatReceipt {
         access(all) let merchantID: String
@@ -87,7 +104,7 @@ access(all) contract FloatsTabManager {
         }
 
         // 1. Deduct from the Tab balance (lock the funds)
-        self.merchantBalances[merchantID] = self.merchantBalances[merchantID]! - amount
+        self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! - amount)
 
         // 2. Calculate Expiration
         let expiration = getCurrentBlock().timestamp + 900.0
@@ -121,7 +138,7 @@ access(all) contract FloatsTabManager {
         let unspent = floatData.amount - spentAmount
 
         // Return unspent amount to the merchant's Tab pool
-        self.merchantBalances[merchantID] = self.merchantBalances[merchantID]! + unspent
+        self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + unspent)
 
         // Destroy the receipt
         destroy receipt
@@ -138,7 +155,7 @@ access(all) contract FloatsTabManager {
                 self.activeFloats[merchantID]!.remove(key: claimerAddress)
 
                 // Return the FULL locked amount back to the merchant's Tab
-                self.merchantBalances[merchantID] = self.merchantBalances[merchantID]! + floatData.amount
+                self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + floatData.amount)
             } else {
                 panic("Float is not yet expired!")
             }
@@ -156,7 +173,7 @@ access(all) contract FloatsTabManager {
                 // Remove it from the registry
                 self.activeFloats[merchantID]!.remove(key: address)
                 // Return the FULL locked amount back to the merchant's Tab
-                self.merchantBalances[merchantID] = self.merchantBalances[merchantID]! + amount
+                self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
             }
         }
     }
@@ -179,5 +196,6 @@ access(all) contract FloatsTabManager {
         self.merchantBalances = {}
         self.activeFlags = {}
         self.activeFloats = {}
+        self.merchantYields = {}
     }
 }
