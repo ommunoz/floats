@@ -1,15 +1,24 @@
+import "FungibleToken"
+import "FlowToken"
 import "YieldVault"
 
 access(all) contract FloatsTabManager {
         
-    // Dictionary mapping merchantID to their funded balance
+    // Dictionary mapping merchantID to their available (locked but unspent) float balance
     access(all) var merchantBalances: {String: UFix64}
+
+    // --- NEW: Option C Protocol-Held Payout Ledgers ---
+    // Tracks the fiat value of floats actually consumed at the merchant.
+    access(all) var merchantRevenuePayouts: {String: UFix64}
+    // Tracks the DeFi yield earned on the merchant's idle capital.
+    access(all) var merchantYieldPayouts: {String: UFix64}
+
+    // --- NEW: Option C The Master Vault ---
+    // This vault actually holds the physical FlowTokens backing the protocol 1:1.
+    access(all) let reserveVault: @{FungibleToken.Vault}
     
     // Dictionary mapping merchantID to their active status
     access(all) var activeFlags: {String: Bool}
-
-    // Dictionary tracking total accrued yield per merchant
-    access(all) var merchantYields: {String: UFix64}
 
     // Single-sponsor tracking for the Hackathon MVP (FIFO assumption)
     access(all) var activeSponsors: {String: Address}
@@ -30,27 +39,37 @@ access(all) contract FloatsTabManager {
     }
 
     // Admin function to create a new Tab for a merchant
-    // (For MVP, using contract level. Real world would use AuthAccount or Admin resource)
     access(all) fun createTab(merchantID: String) {
         pre {
             self.merchantBalances[merchantID] == nil: "Tab already exists for this merchantID"
         }
-        // Initialize with 0.0 balance, set active, and initialize empty claims list
+        // Initialize balances
         self.merchantBalances[merchantID] = 0.0
+        self.merchantRevenuePayouts[merchantID] = 0.0
+        self.merchantYieldPayouts[merchantID] = 0.0
+        
         self.activeFlags[merchantID] = true
         self.activeFloats[merchantID] = {}
-        self.merchantYields[merchantID] = 0.0
+        // (Note: self.activeSponsors handles itself dynamically)
     }
 
-    // Admin function to deposit funds into a merchant's Tab
-    access(all) fun deposit(merchantID: String, amount: UFix64, sponsorAddress: Address) {
+    // --- NEW: Option C True DeFi Deposit ---
+    // Takes a physical FlowToken.Vault instead of an arbitrary number.
+    access(all) fun deposit(merchantID: String, paymentVault: @{FungibleToken.Vault}, sponsorAddress: Address) {
         pre {
             self.merchantBalances[merchantID] != nil: "Tab does not exist for this merchantID"
+            paymentVault.balance > 0.0: "Must deposit more than 0 tokens"
         }
-        // Add the deposited amount to the existing balance and calculate yield
+        
+        let amount = paymentVault.balance
+
+        // 1. Physically lock the tokens in the Master Reserve Vault
+        self.reserveVault.deposit(from: <-paymentVault)
+
+        // 2. Update the internal ledger and secure the yield math
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
         
-        // Track the sponsor so consumers know who to credit for NFT Impact scores
+        // 3. Track the sponsor for NFT Impact scores
         self.activeSponsors[merchantID] = sponsorAddress
     }
 
@@ -62,10 +81,26 @@ access(all) contract FloatsTabManager {
         self.activeFlags[merchantID] = active
     }
 
-    // Public read function to get the current balance of a merchant's Tab
+    // Public read function to get the current unspent balance of a merchant's Tab
     access(all) fun getBalance(merchantID: String): UFix64 {
         if let balance = self.merchantBalances[merchantID] {
             return balance
+        }
+        return 0.0
+    }
+
+    // Public read function to get the merchant's pending revenue payout (Stripe IOU)
+    access(all) fun getRevenuePayout(merchantID: String): UFix64 {
+        if let revenue = self.merchantRevenuePayouts[merchantID] {
+            return revenue
+        }
+        return 0.0
+    }
+
+    // Public read function to get the merchant's pending yield payout (DeFi Income)
+    access(all) fun getYieldPayout(merchantID: String): UFix64 {
+        if let yield = self.merchantYieldPayouts[merchantID] {
+            return yield
         }
         return 0.0
     }
@@ -80,12 +115,17 @@ access(all) contract FloatsTabManager {
 
     // Helper function to update yield whenever the tab balance changes securely
     access(contract) fun updateTabBalanceAndYield(merchantID: String, newBalance: UFix64) {
+        // Calculate accrued yield based on the *old* principal balance
         let accrued = YieldVault.updatePrincipal(merchantID: merchantID, newPrincipal: newBalance)
-        if self.merchantYields[merchantID] != nil {
-            self.merchantYields[merchantID] = self.merchantYields[merchantID]! + accrued
+        
+        // Add the newly accrued yield directly into the merchant's Yield Payout ledger
+        if self.merchantYieldPayouts[merchantID] != nil {
+            self.merchantYieldPayouts[merchantID] = self.merchantYieldPayouts[merchantID]! + accrued
         } else {
-            self.merchantYields[merchantID] = accrued
+            self.merchantYieldPayouts[merchantID] = accrued
         }
+        
+        // Finally, update the Tab's main available balance ledger
         self.merchantBalances[merchantID] = newBalance
     }
 
@@ -109,7 +149,7 @@ access(all) contract FloatsTabManager {
             self.activeFloats[merchantID]![claimerAddress] == nil: "Neighbor already has an active claim for this merchant"
         }
 
-        // 1. Deduct from the Tab balance (lock the funds)
+        // 1. Deduct from the Tab balance (lock the funds out of circulation)
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! - amount)
 
         // 2. Calculate Expiration
@@ -123,86 +163,103 @@ access(all) contract FloatsTabManager {
         return <-create FloatReceipt(merchantID: merchantID, claimerAddress: claimerAddress)
     }
 
-    // Consume or Expire a Float, returning unused funds to the Tab
+    // Consume a Float via Stripe JIT, moving funds from "Locked" to "Revenue Payout"
     access(all) fun consumeFloat(receipt: @FloatReceipt, spentAmount: UFix64) {
         let merchantID = receipt.merchantID
         let claimerAddress = receipt.claimerAddress
         
-        // Assert the FloatData exists in the contract (cannot be in pre-block safely in older Cadence)
-        let floatData = self.activeFloats[merchantID]![claimerAddress] 
-            ?? panic("No active float found for this receipt. It may have expired and been swept.")
+        // Use the internal consumption helper
+        self.internalConsume(merchantID: merchantID, claimerAddress: claimerAddress, spentAmount: spentAmount)
 
-        // Now run the safe pre-conditions on the loaded data
-        // In Cadence 1.0, assertions are sometimes cleaner than strict pre-blocks when mixing with dict unwrapping 
+        // Destroy the receipt since it was used
+        destroy receipt
+    }
+
+    // --- NEW: Option C Backend JIT Consumption ---
+    // The Protocol Admin calls this when the Stripe Webhook authorizes a Tap to Pay.
+    // The admin doesn't have the user's hardware wallet receipt, so they can bypass it.
+    access(all) fun adminConsumeFloat(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
+        // Use the internal consumption helper
+        self.internalConsume(merchantID: merchantID, claimerAddress: claimerAddress, spentAmount: spentAmount)
+    }
+
+    // Internal helper to handle the actual ledger math for both consume methods
+    access(contract) fun internalConsume(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
+        let floatData = self.activeFloats[merchantID]![claimerAddress] 
+            ?? panic("No active float found. It may have expired and been swept.")
+
         assert(spentAmount <= floatData.amount, message: "Cannot spend more than the Float's maxAmount")
         assert(floatData.expiresAt >= getCurrentBlock().timestamp, message: "Float is expired!")
 
         // Remove from the Active Floats registry
         self.activeFloats[merchantID]!.remove(key: claimerAddress)
 
-        // Calculate unspent amount to return
+        // Add the officially spent amount directly to the Merchant's Revenue Payout ledger.
+        self.merchantRevenuePayouts[merchantID] = self.merchantRevenuePayouts[merchantID]! + spentAmount
+
+        // Return *only* the unspent change back to the main Tab pool
         let unspent = floatData.amount - spentAmount
-
-        // Return unspent amount to the merchant's Tab pool
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + unspent)
-
-        // Destroy the receipt
-        destroy receipt
     }
 
-    // Public method for Forte (or anyone) to sweep a specific expired float
-    // Note: We don't need the user's Receipt to do this! We just clean up the contract's accounting.
+    // Specific sweep for a single expired float
     access(all) fun sweepExpiredFloat(merchantID: String, claimerAddress: Address) {
-        
         if let floatData = self.activeFloats[merchantID]![claimerAddress] {
-            
             if floatData.expiresAt < getCurrentBlock().timestamp {
-                // Remove it from the registry
                 self.activeFloats[merchantID]!.remove(key: claimerAddress)
-
-                // Return the FULL locked amount back to the merchant's Tab
                 self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + floatData.amount)
             } else {
                 panic("Float is not yet expired!")
             }
         }
-        // If it's already nil, it was already swept or consumed.
-        // We do NOT panic here, so that users can clean up dead Receipts in their wallets.
     }
 
-    // For Hackathon/Testing: Admin can force sweep all floats without waiting for them to expire
-    // In a real app, this would be protected by an AdminAuth resource. We keep it public for MVP.
+    // Admin force sweep all (For testing/Hackathon MVP)
     access(all) fun adminForceSweepAll(merchantID: String) {
         if let floats = self.activeFloats[merchantID] {
             for address in floats.keys {
                 let amount = floats[address]!.amount
-                // Remove it from the registry
                 self.activeFloats[merchantID]!.remove(key: address)
-                // Return the FULL locked amount back to the merchant's Tab
                 self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
             }
         }
     }
 
-    // Public method for Forte to query expired addresses to sweep
-    access(all) fun getExpiredClaims(merchantID: String): [Address] {
-        let expired: [Address] = []
-        if let floats = self.activeFloats[merchantID] {
-            let now = getCurrentBlock().timestamp
-            for address in floats.keys {
-                if floats[address]!.expiresAt < now {
-                    expired.append(address)
-                }
-            }
+    // --- NEW: Option C Off-Chain Settlement ---
+    // The Protocol Admin calls this when they initiate a real-world Stripe bank transfer.
+    // This physically extracts the USDC (FlowToken) out of the smart contract's Reserve Vault
+    // and deposits it into the Protocol Treasury Wallet, balancing the fiat output exactly.
+    access(all) fun adminWithdrawPayout(merchantID: String, amount: UFix64, isYield: Bool, receiver: &{FungibleToken.Receiver}) {
+        pre {
+            (isYield ? self.merchantYieldPayouts[merchantID]! : self.merchantRevenuePayouts[merchantID]!) >= amount: "Cannot withdraw more than is owed to this merchant"
         }
-        return expired
+        
+        let currentOwed = isYield ? self.merchantYieldPayouts[merchantID]! : self.merchantRevenuePayouts[merchantID]!
+
+        // Deduct from the appropriate internal ledger
+        if isYield {
+            self.merchantYieldPayouts[merchantID] = currentOwed - amount
+        } else {
+            self.merchantRevenuePayouts[merchantID] = currentOwed - amount
+        }
+
+        // Physically extract the backed tokens from the Master Reserve Vault
+        let payoutVault <- self.reserveVault.withdraw(amount: amount)
+        
+        // Push the physical tokens out to the Treasury Wallet
+        receiver.deposit(from: <-payoutVault)
     }
 
     init() {
         self.merchantBalances = {}
+        self.merchantRevenuePayouts = {}
+        self.merchantYieldPayouts = {}
+        
         self.activeFlags = {}
         self.activeFloats = {}
-        self.merchantYields = {}
         self.activeSponsors = {}
+
+        // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
+        self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
     }
 }
