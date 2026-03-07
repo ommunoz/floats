@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { consumeFloatJIT } = require('../services/flow');
+const { consumeFloatJIT, depositToTab } = require('../services/flow');
 
 // This endpoint receives all webhooks from the Stripe Dashboard
 router.post('/webhooks/stripe', async (req, res) => {
@@ -55,6 +55,29 @@ router.post('/webhooks/stripe', async (req, res) => {
             
             // Reply to Stripe: Declined! Insufficient Float Balance
             return res.json({ approved: false });
+        }
+    }
+
+    // --- NEW: Handle Fiat Deposits from Sponsors ---
+    if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = event.data.object;
+        
+        // Ensure this payment was actually meant for funding a tab (check metadata)
+        const merchantID = paymentIntent.metadata?.merchantID;
+        const sponsorAddress = paymentIntent.metadata?.flowAddress;
+        
+        if (merchantID && sponsorAddress) {
+            const fiatAmount = paymentIntent.amount / 100;
+            console.log(`Stripe Deposit Received: $${fiatAmount} from ${sponsorAddress} for ${merchantID}`);
+            
+            try {
+                // Trigger the Flow Blockchain JIT Deposit
+                const txId = await depositToTab(merchantID, sponsorAddress, fiatAmount);
+                console.log(`Flow Deposit Success! Transaction ID: ${txId}`);
+            } catch (error) {
+                console.error(`Flow Deposit Failed: ${error.message}`);
+                // In production, you would trigger a Stripe refund here if the blockchain minting failed
+            }
         }
     }
 

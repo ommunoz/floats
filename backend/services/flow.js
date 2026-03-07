@@ -69,6 +69,30 @@ transaction(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
 }
 `;
 
+const CADENCE_DEPOSIT = `
+import FloatsTabManager from 0xf8d6e0586b0a20c7
+import FlowToken from 0x0ae53cb6e3f42a79
+import FungibleToken from 0xee82856bf20e2aa6
+
+transaction(merchantID: String, sponsorAddress: Address, amount: UFix64) {
+    prepare(signer: auth(Storage, BorrowValue) &Account) {
+        // Find the Treasury FlowToken Vault with proper Withdraw Entitlements
+        let treasuryVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(from: /storage/flowTokenVault)
+            ?? panic("Could not borrow Treasury FlowToken Vault with Withdraw entitlement")
+
+        // Physically extract the exact USDC/FlowToken fiat amount required from the Treasury reserve
+        let extractedFunds <- treasuryVault.withdraw(amount: amount) 
+
+        // Hand the physical funds to the FloatsTabManager to instantly mint the available floats
+        FloatsTabManager.deposit(
+            merchantID: merchantID,
+            paymentVault: <-extractedFunds,
+            sponsorAddress: sponsorAddress
+        )
+    }
+}
+`;
+
 // Execute the transaction using pure NodeJS and FCL (No CLI dependency!)
 async function consumeFloatJIT(merchantID, claimerAddress, spentAmount) {
   
@@ -90,19 +114,50 @@ async function consumeFloatJIT(merchantID, claimerAddress, spentAmount) {
     });
 
     console.log(`FCL Mutate returned txId: ${transactionId}`);
-    
-    // FCL allows us to seamlessly wait for the blockchain to seal the transaction!
     console.log(`Waiting for blockchain to seal...`);
     await fcl.tx(transactionId).onceSealed();
     console.log(`Transaction successfully sealed on-chain!`);
 
     return transactionId;
   } catch (error) {
-    console.error("FCL Transaction Failed:", error);
+    console.error("FCL Consume Failed:", error);
+    throw new Error(error);
+  }
+}
+
+// Executes a fiat deposit on the blockchain by programmatically withdrawing from the Treasury
+async function depositToTab(merchantID, sponsorAddress, amountAmount) {
+  
+  const formattedAmount = amountAmount.toFixed(2);
+  console.log(`Executing Cadence Deposit for ${merchantID}: $${formattedAmount} by ${sponsorAddress} via pure Node.js Payload...`);
+
+  try {
+    const transactionId = await fcl.mutate({
+      cadence: CADENCE_DEPOSIT,
+      args: (arg, t) => [
+        arg(merchantID, t.String),
+        arg(sponsorAddress, t.Address),
+        arg(formattedAmount, t.UFix64)
+      ],
+      proposer: authorizationFunction,
+      payer: authorizationFunction,
+      authorizations: [authorizationFunction],
+      limit: 999
+    });
+
+    console.log(`FCL Mutate returned txId: ${transactionId}`);
+    console.log(`Waiting for blockchain to seal...`);
+    await fcl.tx(transactionId).onceSealed();
+    console.log(`Deposit transaction successfully sealed on-chain!`);
+
+    return transactionId;
+  } catch (error) {
+    console.error("FCL Deposit Failed:", error);
     throw new Error(error);
   }
 }
 
 module.exports = {
-  consumeFloatJIT
+  consumeFloatJIT,
+  depositToTab
 };
