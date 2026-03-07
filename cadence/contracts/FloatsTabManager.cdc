@@ -185,7 +185,10 @@ access(all) contract FloatsTabManager {
 
     // Internal helper to handle the actual ledger math for both consume methods
     access(contract) fun internalConsume(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
-        let floatData = self.activeFloats[merchantID]![claimerAddress] 
+        let merchantFloats = self.activeFloats[merchantID] 
+            ?? panic("Merchant tab does not exist or has no active floats.")
+
+        let floatData = merchantFloats[claimerAddress] 
             ?? panic("No active float found. It may have expired and been swept.")
 
         assert(spentAmount <= floatData.amount, message: "Cannot spend more than the Float's maxAmount")
