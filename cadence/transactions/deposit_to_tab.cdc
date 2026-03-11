@@ -14,8 +14,8 @@ transaction(merchantID: String, amount: UFix64) {
 
         // --- 2. Physical Token Deposit ---
         // Pass the paymentVault containing actual FlowTokens directly into the contract.
-        // The contract internally updates the native merchantSponsors Leaderboard.
-        FloatsTabManager.deposit(merchantID: merchantID, paymentVault: <-paymentVault, sponsorAddress: signer.address)
+        // The contract internally updates the native tabFunders Leaderboard.
+        FloatsTabManager.deposit(merchantID: merchantID, paymentVault: <-paymentVault, funderAddress: signer.address)
     }
 
     execute {

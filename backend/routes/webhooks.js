@@ -58,21 +58,21 @@ router.post('/webhooks/stripe', async (req, res) => {
         }
     }
 
-    // --- NEW: Handle Fiat Deposits from Sponsors ---
+    // --- NEW: Handle Fiat Deposits from Funders ---
     if (event.type === 'payment_intent.succeeded') {
         const paymentIntent = event.data.object;
         
         // Ensure this payment was actually meant for funding a tab (check metadata)
         const merchantID = paymentIntent.metadata?.merchantID;
-        const sponsorAddress = paymentIntent.metadata?.flowAddress;
+        const funderAddress = paymentIntent.metadata?.flowAddress;
         
-        if (merchantID && sponsorAddress) {
+        if (merchantID && funderAddress) {
             const fiatAmount = paymentIntent.amount / 100;
-            console.log(`Stripe Deposit Received: $${fiatAmount} from ${sponsorAddress} for ${merchantID}`);
+            console.log(`Stripe Deposit Received: $${fiatAmount} from ${funderAddress} for ${merchantID}`);
             
             try {
                 // Trigger the Flow Blockchain JIT Deposit
-                const txId = await depositToTab(merchantID, sponsorAddress, fiatAmount);
+                const txId = await depositToTab(merchantID, funderAddress, fiatAmount);
                 console.log(`Flow Deposit Success! Transaction ID: ${txId}`);
             } catch (error) {
                 console.error(`Flow Deposit Failed: ${error.message}`);

@@ -73,7 +73,7 @@ import FloatsTabManager from 0xf8d6e0586b0a20c7
 import FlowToken from 0x0ae53cb6e3f42a79
 import FungibleToken from 0xee82856bf20e2aa6
 
-transaction(merchantID: String, sponsorAddress: Address, amount: UFix64) {
+transaction(merchantID: String, funderAddress: Address, amount: UFix64) {
     prepare(signer: auth(Storage, BorrowValue) &Account) {
         // Find the Treasury FlowToken Vault with proper Withdraw Entitlements
         let treasuryVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(from: /storage/flowTokenVault)
@@ -86,7 +86,7 @@ transaction(merchantID: String, sponsorAddress: Address, amount: UFix64) {
         FloatsTabManager.deposit(
             merchantID: merchantID,
             paymentVault: <-extractedFunds,
-            sponsorAddress: sponsorAddress
+            funderAddress: funderAddress
         )
     }
 }
@@ -125,17 +125,17 @@ async function consumeFloatJIT(merchantID, claimerAddress, spentAmount) {
 }
 
 // Executes a fiat deposit on the blockchain by programmatically withdrawing from the Treasury
-async function depositToTab(merchantID, sponsorAddress, amountAmount) {
+async function depositToTab(merchantID, funderAddress, amountAmount) {
   
   const formattedAmount = amountAmount.toFixed(2);
-  console.log(`Executing Cadence Deposit for ${merchantID}: $${formattedAmount} by ${sponsorAddress} via pure Node.js Payload...`);
+  console.log(`Executing Cadence Deposit for ${merchantID}: $${formattedAmount} by ${funderAddress} via pure Node.js Payload...`);
 
   try {
     const transactionId = await fcl.mutate({
       cadence: CADENCE_DEPOSIT,
       args: (arg, t) => [
         arg(merchantID, t.String),
-        arg(sponsorAddress, t.Address),
+        arg(funderAddress, t.Address),
         arg(formattedAmount, t.UFix64)
       ],
       proposer: authorizationFunction,

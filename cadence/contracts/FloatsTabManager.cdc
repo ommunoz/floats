@@ -17,10 +17,10 @@ access(all) contract FloatsTabManager {
     // This vault actually holds the physical FlowTokens backing the protocol 1:1.
     access(all) let reserveVault: @{FungibleToken.Vault}
     // Option C: Native Leaderboard Registry
-    // Contextual tracking: merchantID -> sponsorAddress -> SponsorStats
-    access(all) var merchantSponsors: {String: {Address: SponsorStats}}
+    // Contextual tracking: merchantID -> funderAddress -> FunderStats
+    access(all) var tabFunders: {String: {Address: FunderStats}}
 
-    access(all) struct SponsorStats {
+    access(all) struct FunderStats {
         // In Cadence 1.0, to allow the outer contract to modify these directly while 
         // still allowing public read access, we use public getter functions or change the access modifier.
         access(all) var totalFunded: UFix64
@@ -70,12 +70,12 @@ access(all) contract FloatsTabManager {
         
         self.activeFlags[merchantID] = true
         self.activeFloats[merchantID] = {}
-        self.merchantSponsors[merchantID] = {}
+        self.tabFunders[merchantID] = {}
     }
 
     // --- NEW: Option C True DeFi Deposit ---
     // Takes a physical FlowToken.Vault instead of an arbitrary number.
-    access(all) fun deposit(merchantID: String, paymentVault: @{FungibleToken.Vault}, sponsorAddress: Address) {
+    access(all) fun deposit(merchantID: String, paymentVault: @{FungibleToken.Vault}, funderAddress: Address) {
         pre {
             self.merchantBalances[merchantID] != nil: "Tab does not exist for this merchantID"
             paymentVault.balance > 0.0: "Must deposit more than 0 tokens"
@@ -90,12 +90,12 @@ access(all) contract FloatsTabManager {
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
         
         // 3. Update the Leaderboard Registry
-        if self.merchantSponsors[merchantID]![sponsorAddress] == nil {
-            self.merchantSponsors[merchantID]!.insert(key: sponsorAddress, SponsorStats(totalFunded: amount))
+        if self.tabFunders[merchantID]![funderAddress] == nil {
+            self.tabFunders[merchantID]!.insert(key: funderAddress, FunderStats(totalFunded: amount))
         } else {
-            let stats = self.merchantSponsors[merchantID]![sponsorAddress]!
+            let stats = self.tabFunders[merchantID]![funderAddress]!
             stats.addFunding(amount)
-            self.merchantSponsors[merchantID]!.insert(key: sponsorAddress, stats)
+            self.tabFunders[merchantID]!.insert(key: funderAddress, stats)
         }
     }
 
@@ -286,7 +286,7 @@ access(all) contract FloatsTabManager {
         
         self.activeFlags = {}
         self.activeFloats = {}
-        self.merchantSponsors = {}
+        self.tabFunders = {}
 
         // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
         self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
