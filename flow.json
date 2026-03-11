@@ -21,7 +21,6 @@
 				"testnet": "9a0766d93b6608b7"
 			}
 		},
-		"PatronageNFT": "./cadence/contracts/PatronageNFT.cdc",
 		"YieldVault": "./cadence/contracts/YieldVault.cdc"
 	},
 	"networks": {
@@ -44,14 +43,13 @@
 		},
 		"neighbor": {
 			"address": "179b6b1cb6755e31",
-			"key": "c5f33166ac5e7a25d6794f1e75a3b3bc3e1897801b35dd06110e5653007f1e22"
+			"key": "09994121c5d1bb833ca3868101b86eec24a47c503cc32bbdd6b4802f6ab5871f"
 		}
 	},
 	"deployments": {
 		"emulator": {
 			"emulator-account": [
 				"YieldVault",
-				"PatronageNFT",
 				"FloatsTabManager"
 			]
 		}

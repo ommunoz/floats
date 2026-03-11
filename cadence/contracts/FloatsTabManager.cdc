@@ -16,12 +16,32 @@ access(all) contract FloatsTabManager {
     // --- NEW: Option C The Master Vault ---
     // This vault actually holds the physical FlowTokens backing the protocol 1:1.
     access(all) let reserveVault: @{FungibleToken.Vault}
-    
+    // Option C: Native Leaderboard Registry
+    // Contextual tracking: merchantID -> sponsorAddress -> SponsorStats
+    access(all) var merchantSponsors: {String: {Address: SponsorStats}}
+
+    access(all) struct SponsorStats {
+        // In Cadence 1.0, to allow the outer contract to modify these directly while 
+        // still allowing public read access, we use public getter functions or change the access modifier.
+        access(all) var totalFunded: UFix64
+        
+        init(totalFunded: UFix64) {
+            self.totalFunded = totalFunded
+        }
+
+        access(contract) fun addFunding(_ amount: UFix64) {
+            self.totalFunded = self.totalFunded + amount
+        }
+
+        access(all) view fun getTier(): String {
+            if self.totalFunded >= 100.0 { return "Hero" }
+            if self.totalFunded >= 50.0 { return "Champion" }
+            return "Supporter"
+        }
+    }
+
     // Dictionary mapping merchantID to their active status
     access(all) var activeFlags: {String: Bool}
-
-    // Single-sponsor tracking for the Hackathon MVP (FIFO assumption)
-    access(all) var activeSponsors: {String: Address}
 
     // Registry tracking the actual locked funds for claimed floats
     // Structure: activeFloats[merchantID][claimerAddress] = FloatData
@@ -50,7 +70,7 @@ access(all) contract FloatsTabManager {
         
         self.activeFlags[merchantID] = true
         self.activeFloats[merchantID] = {}
-        // (Note: self.activeSponsors handles itself dynamically)
+        self.merchantSponsors[merchantID] = {}
     }
 
     // --- NEW: Option C True DeFi Deposit ---
@@ -69,8 +89,14 @@ access(all) contract FloatsTabManager {
         // 2. Update the internal ledger and secure the yield math
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
         
-        // 3. Track the sponsor for NFT Impact scores
-        self.activeSponsors[merchantID] = sponsorAddress
+        // 3. Update the Leaderboard Registry
+        if self.merchantSponsors[merchantID]![sponsorAddress] == nil {
+            self.merchantSponsors[merchantID]!.insert(key: sponsorAddress, SponsorStats(totalFunded: amount))
+        } else {
+            let stats = self.merchantSponsors[merchantID]![sponsorAddress]!
+            stats.addFunding(amount)
+            self.merchantSponsors[merchantID]!.insert(key: sponsorAddress, stats)
+        }
     }
 
     // Admin function to toggle the active status of a Tab
@@ -260,7 +286,7 @@ access(all) contract FloatsTabManager {
         
         self.activeFlags = {}
         self.activeFloats = {}
-        self.activeSponsors = {}
+        self.merchantSponsors = {}
 
         // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
         self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())

@@ -60,7 +60,6 @@ const authorizationFunction = async (account) => {
 // The raw Cadence transaction text
 const CADENCE_CONSUME = `
 import FloatsTabManager from 0xf8d6e0586b0a20c7
-import PatronageNFT from 0xf8d6e0586b0a20c7
 
 transaction(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
     prepare(signer: auth(Storage) &Account) {
