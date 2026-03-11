@@ -1,0 +1,66 @@
+// Colors ported strictly from demo-src/index.css Tailwind vars
+
+:root {
+  // Brand
+  --floats-navy: hsl(218, 46%, 20%);
+  --floats-teal: hsl(174, 100%, 35%);
+  --floats-orange: hsl(25, 95%, 53%);
+  --floats-amber: hsl(38, 92%, 50%);
+  
+  // Base
+  --background: hsl(200, 27%, 98%);
+  --foreground: hsl(218, 46%, 20%);
+  --card: hsl(0, 0%, 100%);
+  --muted: hsl(210, 20%, 94%);
+  --muted-foreground: hsl(218, 20%, 46%);
+  --border: hsl(210, 20%, 90%);
+  --destructive: hsl(0, 84%, 60%);
+
+  // Specific grays for UI spec matching
+  --gray-200: hsl(210, 20%, 90%); // Using --border
+  --gray-400: hsl(218, 20%, 46%); // Using --muted-foreground 
+  --gray-600: hsl(215, 16%, 47%); // Approximate for subtle text
+}
+
+// Global utility classes for Vue text styling to match Tailwind behaviors
+.text-xs { font-size: 0.75rem; line-height: 1rem; }
+.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+.text-base { font-size: 1rem; line-height: 1.5rem; }
+.text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+.text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+.text-2xl { font-size: 1.5rem; line-height: 2rem; }
+.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+.text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+.text-\[10px\] { font-size: 10px; line-height: 14px; }
+
+.font-normal { font-weight: 400; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.capitalize { text-transform: capitalize; }
+.uppercase { text-transform: uppercase; }
+.tracking-wide { letter-spacing: 0.025em; }
+.tracking-wider { letter-spacing: 0.05em; }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 0.25rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+
+// Animations ported from index.css
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes pulse-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
