@@ -20,6 +20,9 @@ access(all) contract FloatsTabManager {
     // Contextual tracking: merchantID -> funderAddress -> FunderStats
     access(all) var tabFunders: {String: {Address: FunderStats}}
 
+    // Lifetime count of floats successfully consumed at each tab (social proof metric)
+    access(all) var tabRedemptionCount: {String: UInt64}
+
     access(all) struct FunderStats {
         // In Cadence 1.0, to allow the outer contract to modify these directly while 
         // still allowing public read access, we use public getter functions or change the access modifier.
@@ -71,6 +74,7 @@ access(all) contract FloatsTabManager {
         self.activeFlags[merchantID] = true
         self.activeFloats[merchantID] = {}
         self.tabFunders[merchantID] = {}
+        self.tabRedemptionCount[merchantID] = 0
     }
 
     // --- NEW: Option C True DeFi Deposit ---
@@ -226,6 +230,9 @@ access(all) contract FloatsTabManager {
         // Add the officially spent amount directly to the Merchant's Revenue Payout ledger.
         self.merchantRevenuePayouts[merchantID] = self.merchantRevenuePayouts[merchantID]! + spentAmount
 
+        // Increment the lifetime redemption counter for social proof
+        self.tabRedemptionCount[merchantID] = (self.tabRedemptionCount[merchantID] ?? 0) + 1
+
         // Return *only* the unspent change back to the main Tab pool
         let unspent = floatData.amount - spentAmount
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + unspent)
@@ -287,6 +294,7 @@ access(all) contract FloatsTabManager {
         self.activeFlags = {}
         self.activeFloats = {}
         self.tabFunders = {}
+        self.tabRedemptionCount = {}
 
         // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
         self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
