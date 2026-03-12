@@ -1,11 +1,12 @@
 <template>
   <div class="avatar-stack">
-    <img
-      v-for="(src, i) in shown"
+    <BaseAvatar
+      v-for="(seed, i) in shown"
       :key="i"
-      :src="src"
-      alt=""
-      :class="['avatar-img', `avatar-img--${size}`]"
+      :seed="seed"
+      :size="size"
+      border
+      class="stack-item"
     />
     <div v-if="overflow > 0" :class="['avatar-overflow', `avatar-overflow--${size}`]">
       +{{ overflow }}
@@ -15,9 +16,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import BaseAvatar from './BaseAvatar.vue'
 
 const props = withDefaults(defineProps<{
-  avatars: string[]
+  seeds: string[]
   max?: number
   size?: 'sm' | 'md'
 }>(), {
@@ -25,8 +27,8 @@ const props = withDefaults(defineProps<{
   size: 'sm',
 })
 
-const shown = computed(() => props.avatars.slice(0, props.max))
-const overflow = computed(() => props.avatars.length - props.max)
+const shown = computed(() => props.seeds.slice(0, props.max))
+const overflow = computed(() => props.seeds.length - props.max)
 </script>
 
 <style lang="scss" scoped>
@@ -35,17 +37,9 @@ const overflow = computed(() => props.avatars.length - props.max)
   align-items: center;
 }
 
-.avatar-img {
-  border-radius: 9999px;
-  border: 2px solid var(--card);
-  background: var(--muted);
+.stack-item {
   margin-left: -0.5rem;
-  object-fit: cover;
-
   &:first-child { margin-left: 0; }
-
-  &--sm { width: 1.75rem; height: 1.75rem; }
-  &--md { width: 2.25rem; height: 2.25rem; }
 }
 
 .avatar-overflow {

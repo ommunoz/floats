@@ -8,7 +8,7 @@
     "floatsAvailable": 8,
     "floatValue": 5,
     "floatsGrabbed": 12,
-    "neighborhood": "West Village"
+    "address": "123 Bleecker St, New York, NY 10014"
   },
   {
     "id": "corner-bakery-01",
@@ -19,7 +19,7 @@
     "floatsAvailable": 2,
     "floatValue": 5,
     "floatsGrabbed": 5,
-    "neighborhood": "Chelsea"
+    "address": "250 8th Ave, New York, NY 10011"
   },
   {
     "id": "civic-brew-01",
@@ -30,7 +30,7 @@
     "floatsAvailable": 0,
     "floatValue": 5,
     "floatsGrabbed": 3,
-    "neighborhood": "SoHo"
+    "address": "150 Spring St, New York, NY 10012"
   },
   {
     "id": "plaza-taqueria-01",
@@ -41,7 +41,7 @@
     "floatsAvailable": 6,
     "floatValue": 5,
     "floatsGrabbed": 8,
-    "neighborhood": "Williamsburg"
+    "address": "130 Bedford Ave, Brooklyn, NY 11211"
   },
   {
     "id": "good-news-books-01",
@@ -52,6 +52,6 @@
     "floatsAvailable": 1,
     "floatValue": 5,
     "floatsGrabbed": 2,
-    "neighborhood": "Greenpoint"
+    "address": "180 Manhattan Ave, Brooklyn, NY 11222"
   }
 ]

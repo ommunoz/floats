@@ -16,6 +16,15 @@
   --border: hsl(210, 20%, 90%);
   --destructive: hsl(0, 84%, 60%);
 
+  // Colors used in new components (semantic fallbacks for missing Tailwind classes)
+  --blue-100: #dbeafe;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --purple-500: #a855f7;
+  --purple-600: #9333ea;
+  --purple-700: #7e22ce;
+
   // Specific grays for UI spec matching
   --gray-200: hsl(210, 20%, 90%); // Using --border
   --gray-400: hsl(218, 20%, 46%); // Using --muted-foreground 

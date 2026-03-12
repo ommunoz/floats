@@ -10,15 +10,17 @@
       </div>
 
       <div class="merchant-header-row">
-        <div class="merchant-info">
-          <h3 class="merchant-name">{{ tab.merchantName }}</h3>
-          <span class="merchant-neighborhood">{{ tab.neighborhood }}</span>
-        </div>
+        <h3 class="merchant-name">{{ tab.merchantName }}</h3>
         <TabStatusPill v-if="store.balancesLoaded" :status="tab.healthStatus" />
       </div>
 
+      <div class="location-row" v-if="tab.address">
+        <MapPin class="location-icon" />
+        <span class="merchant-address">{{ tab.address }}</span>
+      </div>
+
       <div class="card-bottom" v-if="store.balancesLoaded && tab.floatsGrabbed > 0">
-        <AvatarStack :avatars="dynamicAvatars" />
+        <AvatarStack :seeds="dynamicSeeds" />
         <span class="floats-count">{{ tab.floatsGrabbed }} {{ tab.floatsGrabbed === 1 ? 'float' : 'floats' }} grabbed</span>
       </div>
     </div>
@@ -29,15 +31,22 @@
 import { computed } from 'vue'
 import AvatarStack from './AvatarStack.vue'
 import TabStatusPill from './TabStatusPill.vue'
+import { MapPin } from 'lucide-vue-next'
 import type { Tab } from '../stores/tabs'
 import { useTabsStore } from '../stores/tabs'
 
 const props = defineProps<{ tab: Tab }>()
 const store = useTabsStore()
 
-const dynamicAvatars = computed(() => {
+const dynamicSeeds = computed(() => {
+  // 1. If we have real on-chain claimers, use those first
+  if (props.tab.claimerAddresses && props.tab.claimerAddresses.length > 0) {
+    return props.tab.claimerAddresses
+  }
+
+  // 2. Fallback to deterministic placeholders based on ID
   return Array.from({ length: props.tab.floatsGrabbed }).map((_, i) => 
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${props.tab.id}-${i}`
+    `${props.tab.id}-${i}`
   )
 })
 </script>
@@ -117,8 +126,22 @@ const dynamicAvatars = computed(() => {
   line-height: 1.2;
 }
 
-.merchant-neighborhood {
-  font-size: 1rem;
+.location-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.location-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+.merchant-address {
+  font-size: 0.875rem;
   color: var(--muted-foreground);
   font-weight: 500;
 }
