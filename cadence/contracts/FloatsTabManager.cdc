@@ -23,6 +23,23 @@ access(all) contract FloatsTabManager {
     // Lifetime count of floats successfully consumed at each tab (social proof metric)
     access(all) var tabRedemptionCount: {String: UInt64}
 
+    // Chronological log of recent "fund" and "consume" events for the UI feed (capped at 20)
+    access(all) var tabHistory: {String: [HistoryEvent]}
+
+    access(all) struct HistoryEvent {
+        access(all) let type: String // "fund" or "consume"
+        access(all) let userAddress: Address
+        access(all) let amount: UFix64
+        access(all) let timestamp: UFix64
+
+        init(type: String, userAddress: Address, amount: UFix64, timestamp: UFix64) {
+            self.type = type
+            self.userAddress = userAddress
+            self.amount = amount
+            self.timestamp = timestamp
+        }
+    }
+
     access(all) struct FunderStats {
         // In Cadence 1.0, to allow the outer contract to modify these directly while 
         // still allowing public read access, we use public getter functions or change the access modifier.
@@ -75,6 +92,7 @@ access(all) contract FloatsTabManager {
         self.activeFloats[merchantID] = {}
         self.tabFunders[merchantID] = {}
         self.tabRedemptionCount[merchantID] = 0
+        self.tabHistory[merchantID] = []
     }
 
     // --- NEW: Option C True DeFi Deposit ---
@@ -100,6 +118,13 @@ access(all) contract FloatsTabManager {
             let stats = self.tabFunders[merchantID]![funderAddress]!
             stats.addFunding(amount)
             self.tabFunders[merchantID]!.insert(key: funderAddress, stats)
+        }
+
+        // 4. Log the chronological history event
+        let historyRecord = HistoryEvent(type: "fund", userAddress: funderAddress, amount: amount, timestamp: getCurrentBlock().timestamp)
+        self.tabHistory[merchantID]!.append(historyRecord)
+        if self.tabHistory[merchantID]!.length > 20 {
+            self.tabHistory[merchantID]!.remove(at: 0)
         }
     }
 
@@ -236,6 +261,13 @@ access(all) contract FloatsTabManager {
         // Return *only* the unspent change back to the main Tab pool
         let unspent = floatData.amount - spentAmount
         self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + unspent)
+
+        // Log the chronological history event
+        let historyRecord = HistoryEvent(type: "consume", userAddress: claimerAddress, amount: spentAmount, timestamp: getCurrentBlock().timestamp)
+        self.tabHistory[merchantID]!.append(historyRecord)
+        if self.tabHistory[merchantID]!.length > 20 {
+            self.tabHistory[merchantID]!.remove(at: 0)
+        }
     }
 
     // Specific sweep for a single expired float
@@ -295,6 +327,7 @@ access(all) contract FloatsTabManager {
         self.activeFloats = {}
         self.tabFunders = {}
         self.tabRedemptionCount = {}
+        self.tabHistory = {}
 
         // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
         self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
