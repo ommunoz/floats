@@ -1,0 +1,57 @@
+[
+  {
+    "id": "neighborhood-coffee-01",
+    "merchantName": "The Neighborhood Coffee",
+    "merchantLogo": "https://api.dicebear.com/7.x/shapes/svg?seed=coffee",
+    "coverImage": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80",
+    "healthStatus": "open",
+    "floatsAvailable": 8,
+    "floatValue": 5,
+    "floatsGrabbed": 12,
+    "neighborhood": "West Village"
+  },
+  {
+    "id": "corner-bakery-01",
+    "merchantName": "Corner Bakery",
+    "merchantLogo": "https://api.dicebear.com/7.x/shapes/svg?seed=bakery",
+    "coverImage": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&q=80",
+    "healthStatus": "low",
+    "floatsAvailable": 2,
+    "floatValue": 5,
+    "floatsGrabbed": 5,
+    "neighborhood": "Chelsea"
+  },
+  {
+    "id": "civic-brew-01",
+    "merchantName": "Civic Brew",
+    "merchantLogo": "https://api.dicebear.com/7.x/shapes/svg?seed=brew",
+    "coverImage": "https://images.unsplash.com/photo-1584225064536-d0fbc0a10f18?w=800&q=80",
+    "healthStatus": "empty",
+    "floatsAvailable": 0,
+    "floatValue": 5,
+    "floatsGrabbed": 3,
+    "neighborhood": "SoHo"
+  },
+  {
+    "id": "plaza-taqueria-01",
+    "merchantName": "Plaza Taqueria",
+    "merchantLogo": "https://api.dicebear.com/7.x/shapes/svg?seed=taco",
+    "coverImage": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&q=80",
+    "healthStatus": "open",
+    "floatsAvailable": 6,
+    "floatValue": 5,
+    "floatsGrabbed": 8,
+    "neighborhood": "Williamsburg"
+  },
+  {
+    "id": "good-news-books-01",
+    "merchantName": "Good News Books",
+    "merchantLogo": "https://api.dicebear.com/7.x/shapes/svg?seed=books",
+    "coverImage": "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800&q=80",
+    "healthStatus": "low",
+    "floatsAvailable": 1,
+    "floatValue": 5,
+    "floatsGrabbed": 2,
+    "neighborhood": "Greenpoint"
+  }
+]
