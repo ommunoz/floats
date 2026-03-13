@@ -40,6 +40,7 @@ const tabsPath = path.join(projectRoot, 'frontend', 'src', 'data', 'tabs.json');
 const tabs = JSON.parse(readFileSync(tabsPath, 'utf-8'));
 
 const actorsMeta = [
+  { name: 'Omar Muñoz', isDemoUser: true },
   { name: 'Sarah Chen' },
   { name: 'Marcus Aurelius' },
   { name: 'Bastian Schwein' },
@@ -135,9 +136,17 @@ async function seed() {
         }
     }
 
-    // Update frontend mapping
+    // Update frontend mappings
     const namesPath = path.join(projectRoot, 'frontend', 'src', 'data', 'names.json');
     writeFileSync(namesPath, JSON.stringify(nameMap, null, 2));
+
+    // Export the primary demo user (Omar Muñoz) to be used by the frontend for Stripe Flow
+    const demoUserActor = actors.find(a => a.isDemoUser);
+    const demoUserPath = path.join(projectRoot, 'frontend', 'src', 'data', 'demo_user.json');
+    writeFileSync(demoUserPath, JSON.stringify({
+      address: demoUserActor.addr,
+      name: demoUserActor.name
+    }, null, 2));
 
     // 2. Initialize Merchant Tabs
     console.log(`\nStep 2: Initializing Merchant Tabs...`);
@@ -203,7 +212,8 @@ async function seed() {
         }
 
         for (const action of actions) {
-            const actor = actors[Math.floor(Math.random() * actors.length)];
+            const communityActors = actors.filter(a => !a.isDemoUser);
+            const actor = communityActors[Math.floor(Math.random() * communityActors.length)];
             const value = tab.floatValue.toFixed(8);
 
             try {

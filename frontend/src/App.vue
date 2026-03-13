@@ -1,14 +1,25 @@
 <template>
   <div class="app-layout">
     <!-- Main Content Area -->
-    <main class="app-main">
+    <SetupWarning v-if="authStore.isLoaded && authStore.hasSetupError" />
+    <main v-else-if="authStore.isLoaded" class="app-main">
       <RouterView />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
+import { useAuthStore } from './stores/auth'
+import SetupWarning from './components/SetupWarning.vue'
+
+const authStore = useAuthStore()
+
+onMounted(() => {
+  // Try to load the demo credentials dynamically on boot
+  authStore.loadDemoUser()
+})
 </script>
 
 <style lang="scss" scoped>
