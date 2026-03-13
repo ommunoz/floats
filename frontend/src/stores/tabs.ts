@@ -21,6 +21,7 @@ export interface Tab {
 export const useTabsStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>(tabsData as Tab[])
   const balancesLoaded = ref(false)
+  const discoverView = ref<'feed' | 'map'>('feed')
 
   async function refreshBalances() {
     await Promise.all(
@@ -51,5 +52,5 @@ export const useTabsStore = defineStore('tabs', () => {
 
   refreshBalances()
 
-  return { tabs, balancesLoaded, refreshBalances }
+  return { tabs, balancesLoaded, discoverView, refreshBalances }
 })

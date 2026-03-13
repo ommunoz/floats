@@ -1,5 +1,15 @@
+<script setup lang="ts">
+import { RouterLink } from 'vue-router'
+import TabCard from '../components/TabCard.vue'
+import TabMap from '../components/TabMap.vue'
+import BaseAvatar from '../components/BaseAvatar.vue'
+import { useTabsStore } from '../stores/tabs'
+
+const store = useTabsStore()
+</script>
+
 <template>
-  <div class="discover-page">
+  <div :class="['discover-page', { 'is-map-view': store.discoverView === 'map' }]">
     <!-- Top Navigation Bar natively within Discover -->
     <header class="app-header">
       <div class="header-container">
@@ -14,8 +24,16 @@
 
         <!-- Center: Feed/Map Pill -->
         <div class="nav-pill-group">
-           <span class="pill-item active">Feed</span>
-           <span class="pill-item">Map</span>
+           <span 
+             class="pill-item" 
+             :class="{ active: store.discoverView === 'feed' }"
+             @click="store.discoverView = 'feed'"
+           >Feed</span>
+           <span 
+             class="pill-item" 
+             :class="{ active: store.discoverView === 'map' }"
+             @click="store.discoverView = 'map'"
+           >Map</span>
         </div>
 
         <!-- Right: Profile Avatar Link -->
@@ -28,39 +46,52 @@
       </div>
     </header>
 
-    <!-- Main Feed -->
-    <div class="feed">
-      <TabCard
-        v-for="tab in store.tabs"
-        :key="tab.id"
-        :tab="tab"
-      />
-    </div>
+    <!-- Main Content Area -->
+    <main class="discover-content">
+      <!-- Feed View -->
+      <div v-if="store.discoverView === 'feed'" class="feed">
+        <TabCard
+          v-for="tab in store.tabs"
+          :key="tab.id"
+          :tab="tab"
+        />
+      </div>
+
+      <!-- Map View -->
+      <div v-else class="map-view">
+        <TabMap :tabs="store.tabs" />
+      </div>
+    </main>
   </div>
 </template>
-
-<script setup lang="ts">
-import { RouterLink } from 'vue-router'
-import TabCard from '../components/TabCard.vue'
-import BaseAvatar from '../components/BaseAvatar.vue'
-import { useTabsStore } from '../stores/tabs'
-
-const store = useTabsStore()
-</script>
 
 <style lang="scss" scoped>
 .discover-page {
   min-height: 100vh;
   background-color: var(--background);
+  
+  &.is-map-view {
+    height: 100vh;
+    overflow: hidden;
+  }
 }
 
 .feed {
   padding: 1rem;
   max-width: 28rem;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.map-view {
+  height: calc(100vh - 3.5rem);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Header Styles ported closely from previous App.vue */

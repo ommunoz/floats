@@ -8,7 +8,9 @@
     "floatsAvailable": 8,
     "floatValue": 5,
     "floatsGrabbed": 12,
-    "address": "123 Bleecker St, New York, NY 10014"
+    "address": "123 Bleecker St, New York, NY 10014",
+    "lat": 40.7291,
+    "lng": -73.9993
   },
   {
     "id": "corner-bakery-01",
@@ -19,7 +21,9 @@
     "floatsAvailable": 2,
     "floatValue": 5,
     "floatsGrabbed": 5,
-    "address": "250 8th Ave, New York, NY 10011"
+    "address": "250 8th Ave, New York, NY 10011",
+    "lat": 40.7458,
+    "lng": -73.9984
   },
   {
     "id": "civic-brew-01",
@@ -30,7 +34,9 @@
     "floatsAvailable": 0,
     "floatValue": 5,
     "floatsGrabbed": 3,
-    "address": "150 Spring St, New York, NY 10012"
+    "address": "150 Spring St, New York, NY 10012",
+    "lat": 40.7252,
+    "lng": -74.0011
   },
   {
     "id": "plaza-taqueria-01",
@@ -41,7 +47,9 @@
     "floatsAvailable": 6,
     "floatValue": 5,
     "floatsGrabbed": 8,
-    "address": "130 Bedford Ave, Brooklyn, NY 11211"
+    "address": "130 Bedford Ave, Brooklyn, NY 11211",
+    "lat": 40.7181,
+    "lng": -73.9572
   },
   {
     "id": "good-news-books-01",
@@ -52,6 +60,8 @@
     "floatsAvailable": 1,
     "floatValue": 5,
     "floatsGrabbed": 2,
-    "address": "180 Manhattan Ave, Brooklyn, NY 11222"
+    "address": "180 Manhattan Ave, Brooklyn, NY 11222",
+    "lat": 40.7226,
+    "lng": -73.9442
   }
 ]

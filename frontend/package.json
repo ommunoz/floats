@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@onflow/fcl": "^1.21.9",
+    "@types/leaflet": "^1.9.21",
+    "leaflet": "^1.9.4",
     "lucide-vue-next": "^0.577.0",
     "pinia": "^3.0.4",
     "sass": "^1.98.0",
