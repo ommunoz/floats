@@ -8,12 +8,11 @@ import TabStatusPill from '../components/TabStatusPill.vue'
 import PoolHero from '../components/PoolHero.vue'
 import TabLeaderboard from '../components/TabLeaderboard.vue'
 import TabHistory from '../components/TabHistory.vue'
+import FundSheet from '../components/FundSheet.vue'
 import { 
   ArrowLeft, 
   MapPin
 } from 'lucide-vue-next'
-
-import { formatAddress } from '../utils/names'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +28,9 @@ const healthStatus = ref<Tab['healthStatus'] | null>(null)
 const floatsAvailable = ref(0)
 const isLoading = ref(true)
 const canClaim = computed(() => floatsAvailable.value > 0)
+
+const showFundSheet = ref(false)
+const needsRefresh = ref(false)
 
 onMounted(async () => {
   if (!tab.value) return
@@ -57,9 +59,33 @@ onMounted(async () => {
   }
 })
 
-// Logic moved to sub-components
+const handleFundSuccess = () => {
+  needsRefresh.value = true
+}
 
-
+const handleCloseSheet = async () => {
+  showFundSheet.value = false
+  
+  if (needsRefresh.value) {
+    needsRefresh.value = false
+    
+    // Refresh the tab data after payment
+    try {
+      const bal = await fetchTabBalance(tabId)
+      healthStatus.value = bal.healthStatus
+      floatsAvailable.value = bal.floatsAvailable
+      
+      const [hist, ldb] = await Promise.all([
+        fetchTabHistory(tabId),
+        fetchTabLeaderboard(tabId)
+      ])
+      history.value = hist
+      leaderboard.value = ldb
+    } catch (e) {
+      console.error('Refresh failed:', e)
+    }
+  }
+}
 </script>
 
 <template>
@@ -121,11 +147,19 @@ onMounted(async () => {
         >
           Claim a Float
         </button>
-        <button class="btn btn-fund">
+        <button class="btn btn-fund" @click="showFundSheet = true">
           Add to this Tab
         </button>
       </div>
     </footer>
+
+    <!-- Sheets -->
+    <FundSheet 
+      v-if="showFundSheet && tab" 
+      :tab="tab"
+      @close="handleCloseSheet"
+      @funded="handleFundSuccess"
+    />
   </div>
   
   <div v-else class="not-found">

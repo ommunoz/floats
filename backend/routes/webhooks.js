@@ -4,7 +4,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { consumeFloatJIT, depositToTab } = require('../services/flow');
 
 // This endpoint receives all webhooks from the Stripe Dashboard
-router.post('/webhooks/stripe', async (req, res) => {
+router.post('/stripe', async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
