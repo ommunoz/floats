@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTabsStore } from '../stores/tabs'
-import { fetchTabHistory, fetchTabLeaderboard, fetchTabBalance, type OnChainHistoryEvent, type FunderStats } from '../services/tabs'
+import { fetchTab, type HistoryEvent, type FunderStats } from '../services/tabs'
 import type { Tab } from '../stores/tabs'
 import TabStatusPill from '../components/TabStatusPill.vue'
 import PoolHero from '../components/PoolHero.vue'
@@ -21,41 +21,33 @@ const tabsStore = useTabsStore()
 const tabId = route.params.id as string
 const tab = computed(() => tabsStore.tabs.find(t => t.id === tabId))
 
-const history = ref<OnChainHistoryEvent[]>([])
+const history = ref<HistoryEvent[]>([])
 const leaderboard = ref<Record<string, FunderStats>>({})
 // Health tracking
 const healthStatus = ref<Tab['healthStatus'] | null>(null)
 const floatsAvailable = ref(0)
 const isLoading = ref(true)
+const isFirstLoad = ref(true)
 const canClaim = computed(() => floatsAvailable.value > 0)
 
 const showFundSheet = ref(false)
 const needsRefresh = ref(false)
 
 onMounted(async () => {
-  if (!tab.value) return
-  
-  // 1. Prioritize core health/balance so the hero renders ASAP
+  // Fire off the cadence struct fetch instantly regardless of whether the local JSON dictionary is fully populated yet
   try {
-    const bal = await fetchTabBalance(tabId)
-    healthStatus.value = bal.healthStatus
-    floatsAvailable.value = bal.floatsAvailable
+    const tabData = await fetchTab(tabId)
+    if (tabData) {
+      healthStatus.value = tabData.healthStatus
+      floatsAvailable.value = tabData.floatsAvailable
+      history.value = tabData.struct.history
+      leaderboard.value = tabData.struct.funders
+    }
   } catch (e) {
-    console.error('Failed to load tab balance:', e)
-  }
-
-  // 2. Fetch community data in the background
-  try {
-    const [hist, ldb] = await Promise.all([
-      fetchTabHistory(tabId),
-      fetchTabLeaderboard(tabId)
-    ])
-    history.value = hist
-    leaderboard.value = ldb
-  } catch (e) {
-    console.warn('Failed to load community panels:', e)
+    console.error('Failed to load full Tab object via Master Script:', e)
   } finally {
     isLoading.value = false
+    isFirstLoad.value = false
   }
 })
 
@@ -68,21 +60,21 @@ const handleCloseSheet = async () => {
   
   if (needsRefresh.value) {
     needsRefresh.value = false
+    isLoading.value = true
     
-    // Refresh the tab data after payment
+    // Refresh the tab data natively; the block is already sealed by the sheet delay.
     try {
-      const bal = await fetchTabBalance(tabId)
-      healthStatus.value = bal.healthStatus
-      floatsAvailable.value = bal.floatsAvailable
-      
-      const [hist, ldb] = await Promise.all([
-        fetchTabHistory(tabId),
-        fetchTabLeaderboard(tabId)
-      ])
-      history.value = hist
-      leaderboard.value = ldb
+      const tabData = await fetchTab(tabId)
+      if (tabData) {
+        healthStatus.value = tabData.healthStatus
+        floatsAvailable.value = tabData.floatsAvailable
+        history.value = tabData.struct.history
+        leaderboard.value = tabData.struct.funders
+      }
     } catch (e) {
-      console.error('Refresh failed:', e)
+      console.error('Refresh via Master Script failed:', e)
+    } finally {
+      isLoading.value = false
     }
   }
 }
@@ -124,13 +116,14 @@ const handleCloseSheet = async () => {
       </div>
     </div>
 
-    <main class="tab-content">
+    <main class="tab-content" :class="{ 'is-loading': isLoading }">
       <!-- Pool hero -->
       <PoolHero 
-        v-if="!isLoading"
+        v-if="!isFirstLoad"
         :tab="tab" 
         :floatsAvailable="floatsAvailable" 
         :healthStatus="healthStatus || 'empty'" 
+        :is-loading="isLoading"
       />
 
       <!-- Community Panels -->
@@ -162,7 +155,7 @@ const handleCloseSheet = async () => {
     />
   </div>
   
-  <div v-else class="not-found">
+  <div v-else-if="tabsStore.isInitialized" class="not-found">
     <p>Tab not found</p>
   </div>
 </template>
@@ -295,6 +288,12 @@ const handleCloseSheet = async () => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem; // space-y-6
+  transition: opacity 0.3s ease;
+  
+  &.is-loading {
+    opacity: 0.5;
+    pointer-events: none;
+  }
 }
 
 // Styles moved to sub-components

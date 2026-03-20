@@ -1,26 +1,41 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import type { Tab } from '../stores/tabs'
 
 const props = defineProps<{
   tab: Tab
   floatsAvailable: number
   healthStatus: Tab['healthStatus']
+  isLoading?: boolean
 }>()
 
-const fillPercent = computed(() => {
+const fillTarget = computed(() => {
   if (props.healthStatus === 'open') return 100
   if (props.healthStatus === 'low') return 40
   return 0
 })
+
+const currentFill = ref(0)
+
+// Watch for changes to healthStatus to update the fill animation live
+watch(() => props.healthStatus, () => {
+  currentFill.value = fillTarget.value
+})
+
+onMounted(() => {
+  // Stagger the initial height update to trigger the entry animation
+  setTimeout(() => {
+    currentFill.value = fillTarget.value
+  }, 50)
+})
 </script>
 
 <template>
-  <div :class="['pool-hero', `hero--${healthStatus}`]">
+  <div :class="['pool-hero', `hero--${healthStatus}`, { 'is-refreshing': isLoading }]">
     <!-- Water fill -->
     <div
       class="water-indicator"
-      :style="{ height: `${fillPercent}%` }"
+      :style="{ height: `${currentFill}%` }"
     />
     <div class="content">
       <div class="floats-amount">
@@ -45,6 +60,13 @@ const fillPercent = computed(() => {
   border: 1px solid var(--border); // border-border
   background: var(--card); // bg-card
   overflow: hidden;
+  transition: opacity 0.3s ease;
+  
+  &.is-refreshing {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
   &.hero--open {
     .water-indicator { background: hsla(174, 100%, 35%, 0.12); }
     .floats-amount { color: var(--floats-teal); }

@@ -61,7 +61,7 @@ const emit = defineEmits<{
         class="btn btn-primary w-full"
         :disabled="isProcessing"
       >
-        <span v-if="isProcessing">Connecting...</span>
+        <span v-if="isProcessing">Processing...</span>
         <span v-else>Pay ${{ numericAmount }}</span>
       </button>
     </div>

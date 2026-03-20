@@ -12,7 +12,7 @@
         <div class="event-details">
           <div class="event-header">
             <BaseAvatar :seed="event.userAddress" size="xs" class="avatar" />
-            <span class="address">{{ formatAddress(event.userAddress) }}</span>
+            <span class="address">{{ getDisplayName(event.userAddress) }}</span>
             <span class="action">{{ getEventDescription(event) }}</span>
           </div>
           <p class="event-note">"{{ getEventNote(event) }}"</p>
@@ -23,15 +23,15 @@
 </template>
 
 <script setup lang="ts">
-import type { OnChainHistoryEvent } from '../services/tabs'
-import { formatAddress } from '../utils/names'
-import { getRandomMockNote } from '../data/mockNotes'
+import type { HistoryEvent } from '../services/tabs'
+import { getDisplayName } from '../utils/demoIdentities'
+import { getRandomMockNote } from '../utils/mockNotes'
 import { useNotesStore } from '../stores/notes'
 import BaseAvatar from './BaseAvatar.vue'
 import { DollarSign, Gift, Zap } from 'lucide-vue-next'
 
 const props = defineProps<{
-  history: OnChainHistoryEvent[]
+  history: HistoryEvent[]
 }>()
 
 const notesStore = useNotesStore()
@@ -44,8 +44,8 @@ function getEventIcon(type: string) {
   }
 }
 
-function getEventNote(event: OnChainHistoryEvent) {
-  const lookupKey = event.eventID || `${event.timestamp}_${event.userAddress}`
+function getEventNote(event: HistoryEvent) {
+  const lookupKey = `${event.timestamp}_${event.userAddress}`
   const sessionNote = notesStore.getNote(lookupKey)
   if (sessionNote) return sessionNote
   
@@ -53,7 +53,7 @@ function getEventNote(event: OnChainHistoryEvent) {
   return getRandomMockNote(seedStr, event.type)
 }
 
-function getEventDescription(event: OnChainHistoryEvent) {
+function getEventDescription(event: HistoryEvent) {
   if (event.type === 'fund') return `added $${event.amount.toFixed(0)} to the tab`
   if (event.type === 'consume') return `grabbed a $${event.amount.toFixed(0)} float`
   return 'grabbed a float'

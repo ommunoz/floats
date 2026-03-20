@@ -1,0 +1,30 @@
+{
+  "0xf8d6e0586b0a20c7": {
+    "name": "Service Account",
+    "isDemoUser": false
+  },
+  "0x179b6b1cb6755e31": {
+    "name": "Omar Muñoz",
+    "isDemoUser": true
+  },
+  "0xf3fcd2c1a78f5eee": {
+    "name": "Sarah Chen",
+    "isDemoUser": false
+  },
+  "0xe03daebed8ca0615": {
+    "name": "Marcus Aurelius",
+    "isDemoUser": false
+  },
+  "0x045a1763c93006ca": {
+    "name": "Bastian Schwein",
+    "isDemoUser": false
+  },
+  "0x120e725050340cab": {
+    "name": "Toby Flenderson",
+    "isDemoUser": false
+  },
+  "0xf669cb8d41ce0c74": {
+    "name": "Elena Gilbert",
+    "isDemoUser": false
+  }
+}

@@ -2,18 +2,21 @@ const fcl = require('@onflow/fcl');
 const { SHA3 } = require('sha3');
 const EC = require('elliptic').ec;
 const { execSync } = require('child_process');
-const { readFileSync, writeFileSync } = require('fs');
+const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
 
 const ec = new EC('p256');
 const projectRoot = path.resolve(__dirname, '..');
+const outputsDir = path.join(__dirname, 'outputs');
+if (!existsSync(outputsDir)) {
+    mkdirSync(outputsDir, { recursive: true });
+}
 
 // --- Emulator Setup ---
 const SERVICE_ADDR = 'f8d6e0586b0a20c7';
 const SERVICE_KEY = (process.env.EMULATOR_PRIVATE_KEY || '').replace(/^0x/, '').trim();
 
-// Contract Addresses on Emulator
 const ALIASES = {
     "FloatsTabManager": fcl.withPrefix(SERVICE_ADDR),
     "FungibleToken": "0xee82856bf20e2aa6",
@@ -27,26 +30,19 @@ fcl.config({
 
 const getCadence = (filename) => {
     let content = readFileSync(path.join(projectRoot, 'cadence', filename), 'utf8');
-    // Replace import "Name" with import Name from 0xAddr
-    // We only target the quoted versions to avoid recursion (the result has no quotes)
     for (const [name, addr] of Object.entries(ALIASES)) {
         content = content.replace(new RegExp(`import\\s+"${name}"`, 'g'), `import ${name} from ${addr}`);
     }
     return content;
 };
 
-// --- Test Data ---
-const tabsPath = path.join(projectRoot, 'frontend', 'src', 'data', 'tabs.json');
-const tabs = JSON.parse(readFileSync(tabsPath, 'utf-8'));
+// --- Test Data Inputs ---
+const tabsInputPath = path.join(__dirname, 'inputs', 'tabs.json');
+const rawTabsData = readFileSync(tabsInputPath, 'utf-8');
+const tabs = JSON.parse(rawTabsData);
 
-const actorsMeta = [
-  { name: 'Omar Muñoz', isDemoUser: true },
-  { name: 'Sarah Chen' },
-  { name: 'Marcus Aurelius' },
-  { name: 'Bastian Schwein' },
-  { name: 'Toby Flenderson' },
-  { name: 'Elena Gilbert' }
-];
+const usersInputPath = path.join(__dirname, 'inputs', 'users.json');
+const actorsMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8'));
 
 // --- FCL Signing Helpers ---
 const hashMsgHex = (msgHex) => {
@@ -90,7 +86,8 @@ async function seed() {
     // 1. Programmatically initialize Actors
     console.log(`Step 1: Synchronizing & Funding Actors...`);
     const actors = [];
-    const nameMap = { [fcl.withPrefix(SERVICE_ADDR)]: "Service Account" };
+    const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false } };
+    const adminKeys = {};
     
     const fundTx = `
     import FungibleToken from 0xee82856bf20e2aa6
@@ -111,13 +108,11 @@ async function seed() {
         const pub = keyPair.getPublic('hex').slice(2);
         
         try {
-            // A. Create account via CLI
             const output = execSync(`flow accounts create --key ${pub} --network emulator`, { encoding: 'utf8', stdio: 'pipe' });
             const addrMatch = output.match(/0x[a-fA-F0-9]+/);
             if (!addrMatch) throw new Error("Could not parse address from CLI output");
             const addr = fcl.withPrefix(addrMatch[0]);
 
-            // B. Fund account via FCL
             const txId = await fcl.mutate({
                 cadence: fundTx,
                 args: (arg, t) => [arg(addr, t.Address), arg("1000.0", t.UFix64)],
@@ -129,24 +124,17 @@ async function seed() {
             await fcl.tx(txId).onceSealed();
 
             actors.push({ ...meta, addr, key: priv });
-            nameMap[addr] = meta.name;
+            usersMap[addr] = { name: meta.name, isDemoUser: !!meta.isDemoUser };
+            adminKeys[addr] = { name: meta.name, privateKey: priv };
             console.log(`✅ [${addr}] ($1000 Loaded)`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
         }
     }
 
-    // Update frontend mappings
-    const namesPath = path.join(projectRoot, 'frontend', 'src', 'data', 'names.json');
-    writeFileSync(namesPath, JSON.stringify(nameMap, null, 2));
-
-    // Export the primary demo user (Omar Muñoz) to be used by the frontend for Stripe Flow
-    const demoUserActor = actors.find(a => a.isDemoUser);
-    const demoUserPath = path.join(projectRoot, 'frontend', 'src', 'data', 'demo_user.json');
-    writeFileSync(demoUserPath, JSON.stringify({
-      address: demoUserActor.addr,
-      name: demoUserActor.name
-    }, null, 2));
+    // Export internal debug data to /seed/outputs/
+    writeFileSync(path.join(outputsDir, 'users.json'), JSON.stringify(usersMap, null, 2));
+    writeFileSync(path.join(outputsDir, 'admin_keys.json'), JSON.stringify(adminKeys, null, 2));
 
     // 2. Initialize Merchant Tabs
     console.log(`\nStep 2: Initializing Merchant Tabs...`);
@@ -156,7 +144,7 @@ async function seed() {
             process.stdout.write(`  🏠 ${tab.merchantName}... `);
             const txId = await fcl.mutate({
                 cadence: createTabTx,
-                args: (arg, t) => [arg(tab.id, t.String)],
+                args: (arg, t) => [arg(tab.id, t.String), arg(tab.merchantId, t.String)],
                 proposer: serviceAuth,
                 payer: serviceAuth,
                 authorizations: [serviceAuth],
@@ -177,8 +165,10 @@ async function seed() {
     const consumeTx = getCadence('transactions/consume_float.cdc');
 
     for (const tab of tabs) {
-        const toClaim = tab.floatsGrabbed;
-        const currentAvail = tab.floatsAvailable;
+        // Exctract seed logic explicitly from the separate object
+        if (!tab.seedData) continue;
+        const toClaim = tab.seedData.grabsToSimulate || 0;
+        const currentAvail = tab.seedData.fundsToSimulate || 0;
         
         if (toClaim === 0 && currentAvail === 0) continue;
 
@@ -188,25 +178,20 @@ async function seed() {
         const totalNeeded = toClaim + currentAvail;
         let fundedSoFar = 0;
 
-        // Spread the funding into many small random chunks instead of one or two big drops
         while (fundedSoFar < totalNeeded) {
-            // Pick a small chunk size (1 to 5 floats, i.e., $5 to $25)
             const remaining = totalNeeded - fundedSoFar;
             const chunkSize = Math.min(remaining, Math.floor(Math.random() * 4) + 1);
             
             actions.push({ type: 'fund', count: chunkSize });
             fundedSoFar += chunkSize;
 
-            // Interleave some claims
             if (actions.length % 2 === 0 && actions.filter(a => a.type === 'claim').length < toClaim) {
                 actions.push({ type: 'claim' });
             }
         }
 
-        // Fill in any remaining claims
         const currentClaims = actions.filter(a => a.type === 'claim').length;
         for (let i = 0; i < (toClaim - currentClaims); i++) {
-            // Insert claims at random positions instead of just appending
             const pos = Math.floor(Math.random() * (actions.length - 1)) + 1;
             actions.splice(pos, 0, { type: 'claim' });
         }
@@ -261,7 +246,27 @@ async function seed() {
         }
     }
 
-    console.log(`\n🎉 SEEDING COMPLETE. Demo is live and organic.`);
+    // 4. Clean Migration to Frontend
+    console.log(`\nStep 4: Copying Artifacts to Frontend...`);
+    const frontendDataDir = path.join(projectRoot, 'frontend', 'src', 'data');
+    if (!existsSync(frontendDataDir)) {
+        mkdirSync(frontendDataDir, { recursive: true });
+    }
+
+    // Sanitize the inputs to ensure the Frontend respects our architecture (removing seedData entirely)
+    const sanitizedTabs = tabs.map(t => {
+        const copy = { ...t };
+        delete copy.seedData;
+        return copy;
+    });
+
+    writeFileSync(path.join(frontendDataDir, 'tabs.json'), JSON.stringify(sanitizedTabs, null, 2));
+    writeFileSync(path.join(frontendDataDir, 'users.json'), JSON.stringify(usersMap, null, 2));
+    
+    console.log(`  📦 Exported sanitized tabs.json to frontend`);
+    console.log(`  📦 Exported consolidated users.json to frontend`);
+
+    console.log(`\n🎉 SEEDING COMPLETE. Demo is live and configured cleanly.`);
 }
 
 seed().catch(console.error);

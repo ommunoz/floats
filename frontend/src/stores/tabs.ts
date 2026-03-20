@@ -1,44 +1,56 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import tabsData from '../data/tabs.json'
-import { fetchTabBalance, fetchRedemptionCount, fetchTabHistory } from '../services/tabs'
-
-
+import { fetchTab } from '../services/tabs'
 
 export interface Tab {
   id: string
+  merchantId: string
   merchantName: string
   merchantLogo: string
   address: string
   coverImage: string
-  healthStatus: 'open' | 'low' | 'empty'
-  floatsAvailable: number
+  healthStatus?: 'open' | 'low' | 'empty'
+  floatsAvailable?: number
   floatValue: number
-  floatsGrabbed: number
+  floatsGrabbed?: number
   claimerAddresses?: string[]
 }
 
 export const useTabsStore = defineStore('tabs', () => {
-  const tabs = ref<Tab[]>(tabsData as Tab[])
+  const tabs = ref<Tab[]>([])
   const balancesLoaded = ref(false)
+  const isInitialized = ref(false)
   const discoverView = ref<'feed' | 'map'>('feed')
+
+  async function loadTabsData() {
+    try {
+      const response = await fetch('/src/data/tabs.json')
+      if (response.ok) {
+        tabs.value = await response.json()
+        isInitialized.value = true
+        await refreshBalances()
+      }
+    } catch (e) {
+      console.warn("Could not load tabs.json fallback.")
+    }
+  }
+
+  loadTabsData()
 
   async function refreshBalances() {
     await Promise.all(
       tabs.value.map(async (tab) => {
         try {
-          const [{ floatsAvailable, healthStatus }, floatsGrabbed, history] = await Promise.all([
-            fetchTabBalance(tab.id),
-            fetchRedemptionCount(tab.id),
-            fetchTabHistory(tab.id)
-          ])
-          tab.floatsAvailable = floatsAvailable
-          tab.healthStatus = healthStatus
-          tab.floatsGrabbed = floatsGrabbed
+          const tabData = await fetchTab(tab.id)
+          if (!tabData) return
+          
+          tab.floatsAvailable = tabData.floatsAvailable
+          tab.healthStatus = tabData.healthStatus
+          tab.floatsGrabbed = tabData.struct.redemptionCount
           
           // Get unique claimers for the avatar stack
           tab.claimerAddresses = [...new Set(
-            history
+            tabData.struct.history
               .filter(e => e.type === 'consume')
               .map(e => e.userAddress)
           )].slice(0, 8) // Limit to a reasonable number for the stack
@@ -50,7 +62,5 @@ export const useTabsStore = defineStore('tabs', () => {
     balancesLoaded.value = true
   }
 
-  refreshBalances()
-
-  return { tabs, balancesLoaded, discoverView, refreshBalances }
+  return { tabs, balancesLoaded, isInitialized, discoverView, refreshBalances }
 })

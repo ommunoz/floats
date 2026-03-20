@@ -1,30 +1,31 @@
 import "FloatsTabManager"
 
-transaction(merchantID: String, amount: UFix64) {
+transaction(tabID: String, amount: UFix64) {
 
-    prepare(signer: auth(Storage) &Account) {
+    prepare(signer: auth(Storage, Capabilities) &Account) {
         
-        // If the user already has a Receipt, let's see if the contract sweep will allow a new one
+        // If the user already has a Receipt, handle the cleanup via the contract
         if let receiptRef = signer.storage.borrow<&FloatsTabManager.FloatReceipt>(from: /storage/FloatReceiptClaim) {
-            
-            // Try to sweep it first. If it's expired, the contract will eat it.
-            // If it's not expired, this will panic and stop the double-claim.
-            FloatsTabManager.sweepExpiredFloat(merchantID: merchantID, claimerAddress: signer.address)
-            
-            // If we didn't panic, it was expired and swept! We can now destroy our useless receipt.
-            let uselessReceipt <- signer.storage.load<@FloatsTabManager.FloatReceipt>(from: /storage/FloatReceiptClaim)
-            destroy uselessReceipt
-
-            log("Cleaned up an expired Receipt from a previous session.")
+            // Extract the old receipt
+            let oldReceipt <- signer.storage.load<@FloatsTabManager.FloatReceipt>(from: /storage/FloatReceiptClaim)!
+            // Use the contract's discard function to cleanly return pending unspent funds back to the idle pool
+            FloatsTabManager.discardReceipt(receipt: <-oldReceipt)
+            log("Cleaned up an old Receipt from a previous session.")
         }
 
-        // Call the public contract method to mint the Receipt
-        let newReceipt <- FloatsTabManager.claimFloat(merchantID: merchantID, amount: amount, claimerAddress: signer.address)
+        // Call the public contract method to mint the new Data-Stamped Receipt
+        let newReceipt <- FloatsTabManager.claimFloat(tabID: tabID, amount: amount, claimerAddress: signer.address)
 
         // Save the minted Receipt to the user's account storage
         signer.storage.save(<-newReceipt, to: /storage/FloatReceiptClaim)
         
-        log("Successfully claimed a Float for merchant: ".concat(merchantID))
+        // --- NEW: THE PUBLIC UX LOCK ---
+        // Expose the receipt data (amount, expiresAt) to the frontend without exposing the ability to withdraw it.
+        signer.capabilities.unpublish(/public/FloatReceiptPublic) // cleanup old capability just in case
+        let cap = signer.capabilities.storage.issue<&FloatsTabManager.FloatReceipt>(/storage/FloatReceiptClaim)
+        signer.capabilities.publish(cap, at: /public/FloatReceiptPublic)
+
+        log("Successfully claimed a Float for tab: ".concat(tabID))
     }
 
     execute {

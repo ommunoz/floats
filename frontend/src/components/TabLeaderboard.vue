@@ -11,7 +11,7 @@
           {{ index + 1 }}
         </span>
         <BaseAvatar :seed="c.address" size="sm" class="avatar" />
-        <span class="address">{{ formatAddress(c.address) }}</span>
+        <span class="address">{{ getDisplayName(c.address) }}</span>
         <span class="amount">${{ c.amount }}</span>
       </div>
     </div>
@@ -21,7 +21,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FunderStats } from '../services/tabs'
-import { formatAddress } from '../utils/names'
+import { getDisplayName } from '../utils/demoIdentities'
 import BaseAvatar from './BaseAvatar.vue'
 
 const props = defineProps<{

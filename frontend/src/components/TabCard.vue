@@ -11,7 +11,7 @@
 
       <div class="merchant-header-row">
         <h3 class="merchant-name">{{ tab.merchantName }}</h3>
-        <TabStatusPill v-if="store.balancesLoaded" :status="tab.healthStatus" />
+        <TabStatusPill v-if="store.balancesLoaded && tab.healthStatus" :status="tab.healthStatus" />
       </div>
 
       <div class="location-row" v-if="tab.address">
@@ -19,7 +19,7 @@
         <span class="merchant-address">{{ tab.address }}</span>
       </div>
 
-      <div class="card-bottom" v-if="store.balancesLoaded && tab.floatsGrabbed > 0">
+      <div class="card-bottom" v-if="store.balancesLoaded && (tab.floatsGrabbed || 0) > 0">
         <AvatarStack :seeds="dynamicSeeds" />
         <span class="floats-count">{{ tab.floatsGrabbed }} {{ tab.floatsGrabbed === 1 ? 'float' : 'floats' }} grabbed</span>
       </div>
@@ -45,7 +45,8 @@ const dynamicSeeds = computed(() => {
   }
 
   // 2. Fallback to deterministic placeholders based on ID
-  return Array.from({ length: props.tab.floatsGrabbed }).map((_, i) => 
+  const grabs = props.tab.floatsGrabbed || 0
+  return Array.from({ length: grabs }).map((_, i) => 
     `${props.tab.id}-${i}`
   )
 })

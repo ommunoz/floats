@@ -3,28 +3,15 @@ import "FlowToken"
 import "YieldVault"
 
 access(all) contract FloatsTabManager {
-        
-    // Dictionary mapping merchantID to their available (locked but unspent) float balance
-    access(all) var merchantBalances: {String: UFix64}
+    
+    // --- The Master Dictionary ---
+    // Single cohesive state grouping for all active tabs
+    access(all) var tabs: {String: Tab}
 
-    // --- NEW: Option C Protocol-Held Payout Ledgers ---
-    // Tracks the fiat value of floats actually consumed at the merchant.
-    access(all) var merchantRevenuePayouts: {String: UFix64}
-    // Tracks the DeFi yield earned on the merchant's idle capital.
-    access(all) var merchantYieldPayouts: {String: UFix64}
-
-    // --- NEW: Option C The Master Vault ---
     // This vault actually holds the physical FlowTokens backing the protocol 1:1.
     access(all) let reserveVault: @{FungibleToken.Vault}
-    // Option C: Native Leaderboard Registry
-    // Contextual tracking: merchantID -> funderAddress -> FunderStats
-    access(all) var tabFunders: {String: {Address: FunderStats}}
 
-    // Lifetime count of floats successfully consumed at each tab (social proof metric)
-    access(all) var tabRedemptionCount: {String: UInt64}
-
-    // Chronological log of recent "fund" and "consume" events for the UI feed (capped at 20)
-    access(all) var tabHistory: {String: [HistoryEvent]}
+    // --- Core Data Structures ---
 
     access(all) struct HistoryEvent {
         access(all) let type: String // "fund" or "consume"
@@ -41,8 +28,6 @@ access(all) contract FloatsTabManager {
     }
 
     access(all) struct FunderStats {
-        // In Cadence 1.0, to allow the outer contract to modify these directly while 
-        // still allowing public read access, we use public getter functions or change the access modifier.
         access(all) var totalFunded: UFix64
         
         init(totalFunded: UFix64) {
@@ -60,14 +45,7 @@ access(all) contract FloatsTabManager {
         }
     }
 
-    // Dictionary mapping merchantID to their active status
-    access(all) var activeFlags: {String: Bool}
-
-    // Registry tracking the actual locked funds for claimed floats
-    // Structure: activeFloats[merchantID][claimerAddress] = FloatData
-    access(all) var activeFloats: {String: {Address: FloatData}}
-
-    // Struct to hold the actual value of a claimed Float inside the contract
+    // Struct to hold the internal state of a claimed float
     access(all) struct FloatData {
         access(all) let amount: UFix64
         access(all) let expiresAt: UFix64
@@ -78,257 +56,355 @@ access(all) contract FloatsTabManager {
         }
     }
 
-    // Admin function to create a new Tab for a merchant
-    access(all) fun createTab(merchantID: String) {
-        pre {
-            self.merchantBalances[merchantID] == nil: "Tab already exists for this merchantID"
-        }
-        // Initialize balances
-        self.merchantBalances[merchantID] = 0.0
-        self.merchantRevenuePayouts[merchantID] = 0.0
-        self.merchantYieldPayouts[merchantID] = 0.0
+    // The Master Object-Oriented Accounting Record
+    access(all) struct Tab {
+        access(all) let id: String
+        access(all) let merchantID: String
         
-        self.activeFlags[merchantID] = true
-        self.activeFloats[merchantID] = {}
-        self.tabFunders[merchantID] = {}
-        self.tabRedemptionCount[merchantID] = 0
-        self.tabHistory[merchantID] = []
+        // Explicit Ledgers
+        access(all) var totalFunded: UFix64
+        access(all) var totalConsumed: UFix64
+        access(all) var pendingAmount: UFix64
+        
+        // Off-Chain Settlement Tracking for the Merchant
+        access(all) var pendingRevenuePayouts: UFix64
+        access(all) var yieldAccrued: UFix64
+
+        // State Tracking (The Rolodex)
+        access(all) var activeFloats: {Address: FloatData}
+        access(all) var funders: {Address: FunderStats}
+        access(all) var history: [HistoryEvent]
+        access(all) var redemptionCount: UInt64
+        access(all) var isActive: Bool
+
+        init(id: String, merchantID: String) {
+            self.id = id
+            self.merchantID = merchantID
+            
+            self.totalFunded = 0.0
+            self.totalConsumed = 0.0
+            self.pendingAmount = 0.0
+            
+            self.pendingRevenuePayouts = 0.0
+            self.yieldAccrued = 0.0
+
+            self.activeFloats = {}
+            self.funders = {}
+            self.history = []
+            self.redemptionCount = 0
+            self.isActive = true
+        }
+
+        // The single Source of Truth formula for Available Liquidity
+        access(all) view fun getAvailableBalance(): UFix64 {
+            return self.totalFunded - self.totalConsumed - self.pendingAmount
+        }
+
+        // --- Mutating Helpers for Cadence 1.0 Access Strictness ---
+        access(contract) fun addFunded(_ amount: UFix64) { self.totalFunded = self.totalFunded + amount }
+        access(contract) fun addPending(_ amount: UFix64) { self.pendingAmount = self.pendingAmount + amount }
+        access(contract) fun deductPending(_ amount: UFix64) { self.pendingAmount = self.pendingAmount - amount }
+        access(contract) fun addConsumed(_ amount: UFix64) { self.totalConsumed = self.totalConsumed + amount }
+        access(contract) fun addRevenue(_ amount: UFix64) { self.pendingRevenuePayouts = self.pendingRevenuePayouts + amount }
+        access(contract) fun deductRevenue(_ amount: UFix64) { self.pendingRevenuePayouts = self.pendingRevenuePayouts - amount }
+        access(contract) fun updateYield(yieldVaultAccrued: UFix64) {
+            self.yieldAccrued = self.yieldAccrued + yieldVaultAccrued
+        }
+        access(contract) fun deductYield(_ amount: UFix64) { self.yieldAccrued = self.yieldAccrued - amount }
+        access(contract) fun incRedemptions() { self.redemptionCount = self.redemptionCount + 1 }
+        access(contract) fun toggleActive(_ active: Bool) { self.isActive = active }
     }
 
-    // --- NEW: Option C True DeFi Deposit ---
-    // Takes a physical FlowToken.Vault instead of an arbitrary number.
-    access(all) fun deposit(merchantID: String, paymentVault: @{FungibleToken.Vault}, funderAddress: Address) {
+    // The Physical Ticket primitive (UX Source of Truth)
+    access(all) resource interface PublicReceipt {
+        access(all) let tabID: String
+        access(all) let claimerAddress: Address
+        access(all) let amount: UFix64
+        access(all) let expiresAt: UFix64
+    }
+
+    access(all) resource FloatReceipt: PublicReceipt {
+        access(all) let tabID: String
+        access(all) let claimerAddress: Address
+        access(all) let amount: UFix64
+        access(all) let expiresAt: UFix64
+
+        init(tabID: String, claimerAddress: Address, amount: UFix64, expiresAt: UFix64) {
+            self.tabID = tabID
+            self.claimerAddress = claimerAddress
+            self.amount = amount
+            self.expiresAt = expiresAt
+        }
+    }
+
+    // --- Admin & Contract Methods ---
+
+    // Create a new Tab
+    access(all) fun createTab(tabID: String, merchantID: String) {
         pre {
-            self.merchantBalances[merchantID] != nil: "Tab does not exist for this merchantID"
+            self.tabs[tabID] == nil: "Tab already exists for this tabID"
+        }
+        self.tabs[tabID] = Tab(id: tabID, merchantID: merchantID)
+    }
+
+    // Deposit physically locks funds into the reserve and logs to the Tab
+    access(all) fun deposit(tabID: String, paymentVault: @{FungibleToken.Vault}, funderAddress: Address) {
+        pre {
+            self.tabs[tabID] != nil: "Tab does not exist"
             paymentVault.balance > 0.0: "Must deposit more than 0 tokens"
         }
         
         let amount = paymentVault.balance
-
-        // 1. Physically lock the tokens in the Master Reserve Vault
+        
+        // 1. Physically lock tokens
         self.reserveVault.deposit(from: <-paymentVault)
 
-        // 2. Update the internal ledger and secure the yield math
-        self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
+        // 2. Clone tab for modification
+        var tab = self.tabs[tabID]!
+
+        // 3. Process Yield on the prior Idle Principal
+        let oldIdlePrincipal = tab.getAvailableBalance()
+        let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + amount)
+        tab.updateYield(yieldVaultAccrued: accrued)
+
+        // 4. Update Explicit Ledger
+        tab.addFunded(amount)
         
-        // 3. Update the Leaderboard Registry
-        if self.tabFunders[merchantID]![funderAddress] == nil {
-            self.tabFunders[merchantID]!.insert(key: funderAddress, FunderStats(totalFunded: amount))
+        // 5. Update Funder Stats
+        if tab.funders[funderAddress] == nil {
+            tab.funders.insert(key: funderAddress, FunderStats(totalFunded: amount))
         } else {
-            let stats = self.tabFunders[merchantID]![funderAddress]!
+            let stats = tab.funders[funderAddress]!
             stats.addFunding(amount)
-            self.tabFunders[merchantID]!.insert(key: funderAddress, stats)
+            tab.funders.insert(key: funderAddress, stats)
         }
 
-        // 4. Log the chronological history event
+        // 6. Log History
         let historyRecord = HistoryEvent(type: "fund", userAddress: funderAddress, amount: amount, timestamp: getCurrentBlock().timestamp)
-        self.tabHistory[merchantID]!.append(historyRecord)
-        if self.tabHistory[merchantID]!.length > 20 {
-            self.tabHistory[merchantID]!.remove(at: 0)
+        tab.history.append(historyRecord)
+        if tab.history.length > 20 {
+            tab.history.remove(at: 0)
         }
+
+        // Save tab back
+        self.tabs[tabID] = tab
     }
 
-    // Admin function to toggle the active status of a Tab
-    access(all) fun toggleActive(merchantID: String, active: Bool) {
+    // Toggle Tab Active Status
+    access(all) fun toggleActive(tabID: String, active: Bool) {
         pre {
-            self.activeFlags[merchantID] != nil: "Tab does not exist for this merchantID"
+            self.tabs[tabID] != nil: "Tab does not exist"
         }
-        self.activeFlags[merchantID] = active
+        var tab = self.tabs[tabID]!
+        tab.toggleActive(active)
+        self.tabs[tabID] = tab
     }
 
-    // Public read function to get the current unspent balance of a merchant's Tab
-    access(all) fun getBalance(merchantID: String): UFix64 {
-        if let balance = self.merchantBalances[merchantID] {
-            return balance
+    // Helper to get all expired claims for a tab (for Lazy Harvesting)
+    access(all) fun getExpiredClaims(tabID: String): [Address] {
+        var expired: [Address] = []
+        if let tab = self.tabs[tabID] {
+            let now = getCurrentBlock().timestamp
+            for address in tab.activeFloats.keys {
+                if let floatData = tab.activeFloats[address] {
+                    if floatData.expiresAt < now {
+                        expired.append(address)
+                    }
+                }
+            }
         }
-        return 0.0
-    }
-
-    // Public read function to get the merchant's pending revenue payout (Stripe IOU)
-    access(all) fun getRevenuePayout(merchantID: String): UFix64 {
-        if let revenue = self.merchantRevenuePayouts[merchantID] {
-            return revenue
-        }
-        return 0.0
-    }
-
-    // Public read function to get the merchant's pending yield payout (DeFi Income)
-    access(all) fun getYieldPayout(merchantID: String): UFix64 {
-        if let yield = self.merchantYieldPayouts[merchantID] {
-            return yield
-        }
-        return 0.0
-    }
-
-    // Public read function to check if a merchant's Tab is active
-    access(all) fun isActive(merchantID: String): Bool {
-        if let active = self.activeFlags[merchantID] {
-            return active
-        }
-        return false
-    }
-
-    // Helper function to update yield whenever the tab balance changes securely
-    access(contract) fun updateTabBalanceAndYield(merchantID: String, newBalance: UFix64) {
-        // Calculate accrued yield based on the *old* principal balance
-        let accrued = YieldVault.updatePrincipal(merchantID: merchantID, newPrincipal: newBalance)
-        
-        // Add the newly accrued yield directly into the merchant's Yield Payout ledger
-        if self.merchantYieldPayouts[merchantID] != nil {
-            self.merchantYieldPayouts[merchantID] = self.merchantYieldPayouts[merchantID]! + accrued
-        } else {
-            self.merchantYieldPayouts[merchantID] = accrued
-        }
-        
-        // Finally, update the Tab's main available balance ledger
-        self.merchantBalances[merchantID] = newBalance
-    }
-
-    // The Receipt primitive: A non-valuable token proving the user initiated a claim
-    access(all) resource FloatReceipt {
-        access(all) let merchantID: String
-        access(all) let claimerAddress: Address
-
-        init(merchantID: String, claimerAddress: Address) {
-            self.merchantID = merchantID
-            self.claimerAddress = claimerAddress
-        }
+        return expired
     }
 
     // Neighbor claims a Float from the Tab
-    access(all) fun claimFloat(merchantID: String, amount: UFix64, claimerAddress: Address): @FloatReceipt {
+    access(all) fun claimFloat(tabID: String, amount: UFix64, claimerAddress: Address): @FloatReceipt {
         pre {
-            self.activeFlags[merchantID] == true: "Tab is not active"
-            self.merchantBalances[merchantID] != nil: "Tab does not exist"
-            self.merchantBalances[merchantID]! >= amount: "Insufficient Tab balance"
-            self.activeFloats[merchantID]![claimerAddress] == nil: "Neighbor already has an active claim for this merchant"
+            self.tabs[tabID] != nil: "Tab does not exist"
+            self.tabs[tabID]!.isActive == true: "Tab is not active"
+            self.tabs[tabID]!.activeFloats[claimerAddress] == nil: "Neighbor already has an active claim for this tab"
         }
 
-        // 1. Deduct from the Tab balance (lock the funds out of circulation)
-        self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! - amount)
+        var tab = self.tabs[tabID]!
+        
+        // --- LAZY HARVESTING ---
+        // If exact available is too low, try to harvest one expired float to recycle liquidity
+        if tab.getAvailableBalance() < amount {
+            let expiredAddresses = self.getExpiredClaims(tabID: tabID)
+            if expiredAddresses.length > 0 {
+                let recycleAddress = expiredAddresses[0]
+                let expiredData = tab.activeFloats[recycleAddress]!
+                
+                // Process Yield before touching principal
+                let oldIdlePrincipal = tab.getAvailableBalance()
+                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + expiredData.amount)
+                tab.updateYield(yieldVaultAccrued: accrued)
 
-        // 2. Calculate Expiration
+                // Free the pending funds back to the idle pool
+                tab.deductPending(expiredData.amount)
+                tab.activeFloats.remove(key: recycleAddress)
+            }
+        }
+
+        assert(tab.getAvailableBalance() >= amount, message: "Insufficient Tab balance even after recycling expired funds")
+
+        // 1. Process Yield before locking principal
+        let oldIdlePrincipal = tab.getAvailableBalance()
+        let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal - amount)
+        tab.updateYield(yieldVaultAccrued: accrued)
+
+        // 2. Lock Funds inside the explicit Pending ledger
+        tab.addPending(amount)
+
+        // 3. Set Expiration
         let expiration = getCurrentBlock().timestamp + 900.0
 
-        // 3. Store the actual value in the contract's registry
-        let floatData = FloatData(amount: amount, expiresAt: expiration)
-        self.activeFloats[merchantID]!.insert(key: claimerAddress, floatData)
+        // 4. Update the active registry (Rolodex)
+        tab.activeFloats.insert(key: claimerAddress, FloatData(amount: amount, expiresAt: expiration))
 
-        // 4. Mint and return the valueless Receipt resource to the user
-        return <-create FloatReceipt(merchantID: merchantID, claimerAddress: claimerAddress)
+        // Save tab state
+        self.tabs[tabID] = tab
+
+        // 5. Mint physical ticket (stamped with data for UX lock)
+        return <-create FloatReceipt(tabID: tabID, claimerAddress: claimerAddress, amount: amount, expiresAt: expiration)
     }
 
-    // Consume a Float via Stripe JIT, moving funds from "Locked" to "Revenue Payout"
-    access(all) fun consumeFloat(receipt: @FloatReceipt, spentAmount: UFix64) {
-        let merchantID = receipt.merchantID
+    // The Discard (Cleaning): Allowed to cleanly remove the user from the Rolodex
+    access(all) fun discardReceipt(receipt: @FloatReceipt) {
+        let tabID = receipt.tabID
         let claimerAddress = receipt.claimerAddress
         
-        // Use the internal consumption helper
-        self.internalConsume(merchantID: merchantID, claimerAddress: claimerAddress, spentAmount: spentAmount)
-
-        // Destroy the receipt since it was used
+        if self.tabs[tabID] != nil {
+            var tab = self.tabs[tabID]!
+            if let floatData = tab.activeFloats[claimerAddress] {
+                // Return funds to the idle pool
+                let oldIdlePrincipal = tab.getAvailableBalance()
+                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + floatData.amount)
+                tab.updateYield(yieldVaultAccrued: accrued)
+                
+                tab.deductPending(floatData.amount)
+                tab.activeFloats.remove(key: claimerAddress)
+                
+                self.tabs[tabID] = tab
+            }
+        }
         destroy receipt
     }
 
-    // --- NEW: Option C Backend JIT Consumption ---
-    // The Protocol Admin calls this when the Stripe Webhook authorizes a Tap to Pay.
-    // The admin doesn't have the user's hardware wallet receipt, so they can bypass it.
-    access(all) fun adminConsumeFloat(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
-        // Use the internal consumption helper
-        self.internalConsume(merchantID: merchantID, claimerAddress: claimerAddress, spentAmount: spentAmount)
+    // Consume a Float via Stripe JIT, moving funds from Pending to Consumed
+    access(all) fun consumeFloat(receipt: @FloatReceipt, spentAmount: UFix64) {
+        let tabID = receipt.tabID
+        let claimerAddress = receipt.claimerAddress
+        self.internalConsume(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
+        destroy receipt
+    }
+
+    access(all) fun adminConsumeFloat(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
+        self.internalConsume(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
     }
 
     // Internal helper to handle the actual ledger math for both consume methods
-    access(contract) fun internalConsume(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
-        let merchantFloats = self.activeFloats[merchantID] 
-            ?? panic("Merchant tab does not exist or has no active floats.")
-
-        let floatData = merchantFloats[claimerAddress] 
-            ?? panic("No active float found. It may have expired and been swept.")
+    access(contract) fun internalConsume(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
+        var tab = self.tabs[tabID] ?? panic("Merchant tab does not exist.")
+        let floatData = tab.activeFloats[claimerAddress] ?? panic("No active float found. It may have expired and been swept.")
 
         assert(spentAmount <= floatData.amount, message: "Cannot spend more than the Float's maxAmount")
         assert(floatData.expiresAt >= getCurrentBlock().timestamp, message: "Float is expired!")
 
-        // Remove from the Active Floats registry
-        self.activeFloats[merchantID]!.remove(key: claimerAddress)
+        // 1. Remove from Rolodex
+        tab.activeFloats.remove(key: claimerAddress)
 
-        // Add the officially spent amount directly to the Merchant's Revenue Payout ledger.
-        self.merchantRevenuePayouts[merchantID] = self.merchantRevenuePayouts[merchantID]! + spentAmount
-
-        // Increment the lifetime redemption counter for social proof
-        self.tabRedemptionCount[merchantID] = (self.tabRedemptionCount[merchantID] ?? 0) + 1
-
-        // Return *only* the unspent change back to the main Tab pool
+        // 2. Compute unspent change that returns to the idle pool
         let unspent = floatData.amount - spentAmount
-        self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + unspent)
 
-        // Log the chronological history event
+        // 3. Yield Processing: Idle Capital increases by unspent change
+        let oldIdlePrincipal = tab.getAvailableBalance()
+        let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + unspent)
+        tab.updateYield(yieldVaultAccrued: accrued)
+
+        // 4. Update Explicit Ledgers
+        tab.deductPending(floatData.amount)
+        tab.addConsumed(spentAmount)
+        tab.addRevenue(spentAmount)
+
+        // 5. Update Metrics
+        tab.incRedemptions()
+        
         let historyRecord = HistoryEvent(type: "consume", userAddress: claimerAddress, amount: spentAmount, timestamp: getCurrentBlock().timestamp)
-        self.tabHistory[merchantID]!.append(historyRecord)
-        if self.tabHistory[merchantID]!.length > 20 {
-            self.tabHistory[merchantID]!.remove(at: 0)
+        tab.history.append(historyRecord)
+        if tab.history.length > 20 {
+            tab.history.remove(at: 0)
         }
+
+        self.tabs[tabID] = tab
     }
 
-    // Specific sweep for a single expired float
-    access(all) fun sweepExpiredFloat(merchantID: String, claimerAddress: Address) {
-        if let floatData = self.activeFloats[merchantID]![claimerAddress] {
-            if floatData.expiresAt < getCurrentBlock().timestamp {
-                self.activeFloats[merchantID]!.remove(key: claimerAddress)
-                self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + floatData.amount)
-            } else {
-                panic("Float is not yet expired!")
+    // Voluntarily return a float to the pool before expiration
+    access(all) fun returnFloat(receipt: @FloatReceipt) {
+        let tabID = receipt.tabID
+        let claimerAddress = receipt.claimerAddress
+        
+        if self.tabs[tabID] != nil {
+            var tab = self.tabs[tabID]!
+            if let floatData = tab.activeFloats[claimerAddress] {
+                let oldIdlePrincipal = tab.getAvailableBalance()
+                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + floatData.amount)
+                tab.updateYield(yieldVaultAccrued: accrued)
+                
+                tab.deductPending(floatData.amount)
+                tab.activeFloats.remove(key: claimerAddress)
+                
+                self.tabs[tabID] = tab
             }
         }
+        destroy receipt
     }
 
     // Admin force sweep all (For testing/Hackathon MVP)
-    access(all) fun adminForceSweepAll(merchantID: String) {
-        if let floats = self.activeFloats[merchantID] {
-            for address in floats.keys {
-                let amount = floats[address]!.amount
-                self.activeFloats[merchantID]!.remove(key: address)
-                self.updateTabBalanceAndYield(merchantID: merchantID, newBalance: self.merchantBalances[merchantID]! + amount)
+    access(all) fun adminForceSweepAll(tabID: String) {
+        if self.tabs[tabID] != nil {
+            var tab = self.tabs[tabID]!
+            var totalReclaimed = 0.0
+
+            for address in tab.activeFloats.keys {
+                let amount = tab.activeFloats[address]!.amount
+                totalReclaimed = totalReclaimed + amount
+                tab.activeFloats.remove(key: address)
+            }
+
+            if totalReclaimed > 0.0 {
+                let oldIdlePrincipal = tab.getAvailableBalance()
+                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + totalReclaimed)
+                tab.updateYield(yieldVaultAccrued: accrued)
+                
+                tab.deductPending(totalReclaimed)
+                self.tabs[tabID] = tab
             }
         }
     }
 
-    // --- NEW: Option C Off-Chain Settlement ---
-    // The Protocol Admin calls this when they initiate a real-world Stripe bank transfer.
-    // This physically extracts the USDC (FlowToken) out of the smart contract's Reserve Vault
-    // and deposits it into the Protocol Treasury Wallet, balancing the fiat output exactly.
-    access(all) fun adminWithdrawPayout(merchantID: String, amount: UFix64, isYield: Bool, receiver: &{FungibleToken.Receiver}) {
+    // Off-Chain Settlement
+    access(all) fun adminWithdrawPayout(tabID: String, amount: UFix64, isYield: Bool, receiver: &{FungibleToken.Receiver}) {
         pre {
-            (isYield ? self.merchantYieldPayouts[merchantID]! : self.merchantRevenuePayouts[merchantID]!) >= amount: "Cannot withdraw more than is owed to this merchant"
+            self.tabs[tabID] != nil: "Tab does not exist"
+            (isYield ? self.tabs[tabID]!.yieldAccrued : self.tabs[tabID]!.pendingRevenuePayouts) >= amount: "Cannot withdraw more than is owed"
         }
         
-        let currentOwed = isYield ? self.merchantYieldPayouts[merchantID]! : self.merchantRevenuePayouts[merchantID]!
+        var updatedTab = self.tabs[tabID]!
 
-        // Deduct from the appropriate internal ledger
         if isYield {
-            self.merchantYieldPayouts[merchantID] = currentOwed - amount
+            updatedTab.deductYield(amount)
         } else {
-            self.merchantRevenuePayouts[merchantID] = currentOwed - amount
+            updatedTab.deductRevenue(amount)
         }
 
-        // Physically extract the backed tokens from the Master Reserve Vault
+        self.tabs[tabID] = updatedTab
+
         let payoutVault <- self.reserveVault.withdraw(amount: amount)
-        
-        // Push the physical tokens out to the Treasury Wallet
         receiver.deposit(from: <-payoutVault)
     }
 
     init() {
-        self.merchantBalances = {}
-        self.merchantRevenuePayouts = {}
-        self.merchantYieldPayouts = {}
-        
-        self.activeFlags = {}
-        self.activeFloats = {}
-        self.tabFunders = {}
-        self.tabRedemptionCount = {}
-        self.tabHistory = {}
-
+        self.tabs = {}
         // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
         self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
     }

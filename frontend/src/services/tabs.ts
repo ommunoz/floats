@@ -1,87 +1,136 @@
 import * as fcl from '@onflow/fcl'
-import { CONTRACT_ADDRESS } from '../flow/config'
-import getTabBalanceScript from '../flow/scripts/get_tab_balance.cdc?raw'
-import getRedemptionCountScript from '../flow/scripts/get_redemption_count.cdc?raw'
-import getTabHistoryScript from '../flow/scripts/get_tab_history.cdc?raw'
-import getTabLeaderboardScript from '../flow/scripts/get_tab_leaderboard.cdc?raw'
-import type { Tab } from '../stores/tabs'
+import getTabScript from '../flow/scripts/get_tab.cdc?raw'
+import getActiveFloatScript from '../flow/scripts/get_active_float.cdc?raw'
+
+/* We use a fallback mock timestamp script if the real one isn't imported correctly */
+const mockTimestampScript = `
+access(all) fun main(): UFix64 {
+    return getCurrentBlock().timestamp
+}
+`
 
 const FLOAT_VALUE = 5
 
-function deriveHealthStatus(floatsAvailable: number): Tab['healthStatus'] {
-  if (floatsAvailable > 2) return 'open'
-  if (floatsAvailable > 0) return 'low'
-  return 'empty'
-}
-
-export async function fetchTabBalance(tabId: string): Promise<{
-  floatsAvailable: number
-  healthStatus: Tab['healthStatus']
-}> {
-  const result = await fcl.query({
-    cadence: getTabBalanceScript.replace('0xFLOATS_TAB_MANAGER', CONTRACT_ADDRESS),
-    args: (arg: any, t: any) => [arg(tabId, t.String)],
-  })
-  const balance = parseFloat(result ?? '0')
-  const floatsAvailable = Math.floor(balance / FLOAT_VALUE)
-  return { floatsAvailable, healthStatus: deriveHealthStatus(floatsAvailable) }
-}
-
-export async function fetchRedemptionCount(tabId: string): Promise<number> {
-  const result = await fcl.query({
-    cadence: getRedemptionCountScript.replace('0xFLOATS_TAB_MANAGER', CONTRACT_ADDRESS),
-    args: (arg: any, t: any) => [arg(tabId, t.String)],
-  })
-  return parseInt(result ?? '0', 10)
-}
-
-export type HistoryEventType = 'fund' | 'consume'
-
-export interface OnChainHistoryEvent {
-  eventID: string
-  type: HistoryEventType
+export interface HistoryEvent {
+  type: 'fund' | 'consume'
   userAddress: string
   amount: number
   timestamp: number
-}
-
-export async function fetchTabHistory(tabId: string): Promise<OnChainHistoryEvent[]> {
-  const result: any[] = await fcl.query({
-    cadence: getTabHistoryScript.replace('0xFLOATS_TAB_MANAGER', CONTRACT_ADDRESS),
-    args: (arg: any, t: any) => [arg(tabId, t.String)],
-  })
-  
-  if (!result) return []
-
-  // Ensure descending chronological order (newest first)
-  return result.map((e: any) => ({
-    eventID: e.eventID,
-    type: e.type,
-    userAddress: e.userAddress,
-    amount: parseFloat(e.amount),
-    timestamp: parseFloat(e.timestamp),
-  })).sort((a, b) => b.timestamp - a.timestamp)
 }
 
 export interface FunderStats {
   totalFunded: number
 }
 
-export async function fetchTabLeaderboard(tabId: string): Promise<Record<string, FunderStats>> {
+export interface FloatData {
+  amount: number
+  expiresAt: number
+}
+
+export interface TabStruct {
+  id: string
+  merchantID: string
+  totalFunded: number
+  totalConsumed: number
+  pendingAmount: number
+  yieldAccrued: number
+  activeFloats: Record<string, FloatData>
+  funders: Record<string, FunderStats>
+  history: HistoryEvent[]
+  redemptionCount: number
+  isActive: boolean
+}
+
+export function deriveHealthStatus(floatsAvailable: number): 'open' | 'low' | 'empty' {
+  if (floatsAvailable > 5) return 'open'
+  if (floatsAvailable > 0) return 'low'
+  return 'empty'
+}
+
+export async function fetchTab(tabId: string): Promise<{ struct: TabStruct, availableBalance: number, floatsAvailable: number, healthStatus: 'open' | 'low' | 'empty' } | null> {
   const result = await fcl.query({
-    cadence: getTabLeaderboardScript.replace('0xFLOATS_TAB_MANAGER', CONTRACT_ADDRESS),
+    cadence: getTabScript,
     args: (arg: any, t: any) => [arg(tabId, t.String)],
   })
+  
+  if (!result) return null
 
-  const leaderboard: Record<string, FunderStats> = {}
-  if (!result) return leaderboard
+  // Ensure descending chronological order for history
+  const history = (result.history || []).map((e: any) => ({
+    type: e.type,
+    userAddress: e.userAddress,
+    amount: parseFloat(e.amount),
+    timestamp: parseFloat(e.timestamp),
+  })).sort((a: any, b: any) => b.timestamp - a.timestamp)
 
-  // The Cadence dictionary is keyed by Address with a struct of totalFunded
-  for (const address of Object.keys(result)) {
-    leaderboard[address] = {
-      totalFunded: parseFloat(result[address].totalFunded)
+  const struct: TabStruct = {
+    id: result.id,
+    merchantID: result.merchantID,
+    totalFunded: parseFloat(result.totalFunded),
+    totalConsumed: parseFloat(result.totalConsumed),
+    pendingAmount: parseFloat(result.pendingAmount),
+    yieldAccrued: parseFloat(result.yieldAccrued),
+    activeFloats: {},
+    funders: {},
+    history,
+    redemptionCount: parseInt(result.redemptionCount),
+    isActive: result.isActive
+  }
+
+  // Parse activeFloats logic via Lazy Harvest anticipation
+  let expiredFundsToAdd = 0
+  const now = Date.now() / 1000
+
+  for (const address of Object.keys(result.activeFloats || {})) {
+    const data = result.activeFloats[address]
+    const amount = parseFloat(data.amount)
+    const expiresAt = parseFloat(data.expiresAt)
+    
+    struct.activeFloats[address] = { amount, expiresAt }
+    
+    if (expiresAt < now) {
+      expiredFundsToAdd += amount
     }
   }
 
-  return leaderboard
+  for (const address of Object.keys(result.funders || {})) {
+    struct.funders[address] = {
+      totalFunded: parseFloat(result.funders[address].totalFunded)
+    }
+  }
+
+  const availableBalance = struct.totalFunded - struct.totalConsumed - struct.pendingAmount + expiredFundsToAdd
+  const floatsAvailable = Math.floor(availableBalance / FLOAT_VALUE)
+
+  return {
+    struct,
+    availableBalance,
+    floatsAvailable,
+    healthStatus: deriveHealthStatus(floatsAvailable)
+  }
+}
+
+export async function fetchActiveFloat(address: string): Promise<FloatData | null> {
+  const result = await fcl.query({
+    cadence: getActiveFloatScript,
+    args: (arg: any, t: any) => [arg(address, t.Address)],
+  })
+
+  if (!result) return null
+
+  return {
+    amount: parseFloat(result.amount),
+    expiresAt: parseFloat(result.expiresAt)
+  }
+}
+
+export async function fetchBlockTimestamp(): Promise<number> {
+  try {
+    const result = await fcl.query({
+      cadence: mockTimestampScript,
+    })
+    return parseFloat(result ?? '0')
+  } catch {
+    return Date.now() / 1000
+  }
 }

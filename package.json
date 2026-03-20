@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed": "node backend/seed_demo.js"
+    "seed": "node seed/demo_seeder.js"
   },
   "keywords": [],
   "author": "",

@@ -1,15 +1,10 @@
 import "FloatsTabManager"
 
-// This transaction allows forcing a sweep of all active claims for a merchant, bypassing the timer
-transaction(merchantID: String) {
-
+transaction(tabID: String) {
     prepare(signer: auth(Storage) &Account) {
-        // Just directly call our testing override
-        FloatsTabManager.adminForceSweepAll(merchantID: merchantID)
-        
-        log("Force swept all floats for merchant: ".concat(merchantID))
+        FloatsTabManager.adminForceSweepAll(tabID: tabID)
+        log("Force Swept all active claims for Tab: ".concat(tabID))
     }
-
     execute {
     }
 }

@@ -5,7 +5,10 @@ const EC = require('elliptic').ec;
 // Configure FCL for the Emulator
 fcl.config({
   "accessNode.api": 'http://127.0.0.1:8888',
-  "flow.network": 'emulator'
+  "flow.network": 'emulator',
+  "0xFLOATS_TAB_MANAGER": "0xf8d6e0586b0a20c7",
+  "0xFLOW_TOKEN": "0x0ae53cb6e3f42a79",
+  "0xFUNGIBLE_TOKEN": "0xee82856bf20e2aa6"
 });
 
 const ec = new EC('p256'); // Flow uses the NIST P-256 curve by default
@@ -59,22 +62,22 @@ const authorizationFunction = async (account) => {
 
 // The raw Cadence transaction text
 const CADENCE_CONSUME = `
-import FloatsTabManager from 0xf8d6e0586b0a20c7
+import FloatsTabManager from 0xFLOATS_TAB_MANAGER
 
-transaction(merchantID: String, claimerAddress: Address, spentAmount: UFix64) {
-    prepare(signer: auth(Storage) &Account) {
-        FloatsTabManager.adminConsumeFloat(merchantID: merchantID, claimerAddress: claimerAddress, spentAmount: spentAmount)
+transaction(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
+    prepare(signer: auth(Storage, Capabilities) &Account) {
+        FloatsTabManager.adminConsumeFloat(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
     }
 }
 `;
 
 const CADENCE_DEPOSIT = `
-import FloatsTabManager from 0xf8d6e0586b0a20c7
-import FlowToken from 0x0ae53cb6e3f42a79
-import FungibleToken from 0xee82856bf20e2aa6
+import FloatsTabManager from 0xFLOATS_TAB_MANAGER
+import FlowToken from 0xFLOW_TOKEN
+import FungibleToken from 0xFUNGIBLE_TOKEN
 
-transaction(merchantID: String, funderAddress: Address, amount: UFix64) {
-    prepare(signer: auth(Storage, BorrowValue) &Account) {
+transaction(tabID: String, funderAddress: Address, amount: UFix64) {
+    prepare(signer: auth(Storage, Capabilities) &Account) {
         // Find the Treasury FlowToken Vault with proper Withdraw Entitlements
         let treasuryVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(from: /storage/flowTokenVault)
             ?? panic("Could not borrow Treasury FlowToken Vault with Withdraw entitlement")
@@ -84,7 +87,7 @@ transaction(merchantID: String, funderAddress: Address, amount: UFix64) {
 
         // Hand the physical funds to the FloatsTabManager to instantly mint the available floats
         FloatsTabManager.deposit(
-            merchantID: merchantID,
+            tabID: tabID,
             paymentVault: <-extractedFunds,
             funderAddress: funderAddress
         )
@@ -93,16 +96,16 @@ transaction(merchantID: String, funderAddress: Address, amount: UFix64) {
 `;
 
 // Execute the transaction using pure NodeJS and FCL (No CLI dependency!)
-async function consumeFloatJIT(merchantID, claimerAddress, spentAmount) {
+async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
   
-  const formattedAmount = spentAmount.toFixed(2);
-  console.log(`Executing Cadence JIT Consume for ${merchantID}: $${formattedAmount} via pure Node.js Payload...`);
+  const formattedAmount = spentAmount.toFixed(8); // UFix64 requires 8 decimal precision for safety
+  console.log(`Executing Cadence JIT Consume for ${tabID}: $${formattedAmount} via pure Node.js Payload...`);
 
   try {
     const transactionId = await fcl.mutate({
       cadence: CADENCE_CONSUME,
       args: (arg, t) => [
-        arg(merchantID, t.String),
+        arg(tabID, t.String),
         arg(claimerAddress, t.Address),
         arg(formattedAmount, t.UFix64)
       ],
@@ -125,16 +128,16 @@ async function consumeFloatJIT(merchantID, claimerAddress, spentAmount) {
 }
 
 // Executes a fiat deposit on the blockchain by programmatically withdrawing from the Treasury
-async function depositToTab(merchantID, funderAddress, amountAmount) {
+async function depositToTab(tabID, funderAddress, amountAmount) {
   
-  const formattedAmount = amountAmount.toFixed(2);
-  console.log(`Executing Cadence Deposit for ${merchantID}: $${formattedAmount} by ${funderAddress} via pure Node.js Payload...`);
+  const formattedAmount = amountAmount.toFixed(8); // UFix64 requires 8 decimal precision for safety
+  console.log(`Executing Cadence Deposit for ${tabID}: $${formattedAmount} by ${funderAddress} via pure Node.js Payload...`);
 
   try {
     const transactionId = await fcl.mutate({
       cadence: CADENCE_DEPOSIT,
       args: (arg, t) => [
-        arg(merchantID, t.String),
+        arg(tabID, t.String),
         arg(funderAddress, t.Address),
         arg(formattedAmount, t.UFix64)
       ],
