@@ -1,6 +1,8 @@
 const fcl = require('@onflow/fcl');
 const { SHA3 } = require('sha3');
 const EC = require('elliptic').ec;
+const fs = require('fs');
+const path = require('path');
 
 // Configure FCL for the Emulator
 fcl.config({
@@ -60,40 +62,22 @@ const authorizationFunction = async (account) => {
     };
 };
 
-// The raw Cadence transaction text
-const CADENCE_CONSUME = `
-import FloatsTabManager from 0xFLOATS_TAB_MANAGER
-
-transaction(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
-    prepare(signer: auth(Storage, Capabilities) &Account) {
-        FloatsTabManager.adminConsumeFloat(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
+// Helper to load and prepare Cadence files from the backend/flow directory
+const loadTransaction = (name) => {
+    const filePath = path.join(__dirname, '..', 'flow', 'transactions', `${name}.cdc`);
+    if (!fs.existsSync(filePath)) {
+        console.warn(`Warning: Transaction file not found at ${filePath}.`);
+        return "";
     }
-}
-`;
+    return fs.readFileSync(filePath, 'utf8')
+        .replace(/0xFLOATS_TAB_MANAGER/g, TREASURY_ADDRESS)
+        .replace(/0xFUNGIBLE_TOKEN/g, "0xee82856bf20e2aa6")
+        .replace(/0xFLOW_TOKEN/g, "0x0ae53cb6e3f42a79");
+};
 
-const CADENCE_DEPOSIT = `
-import FloatsTabManager from 0xFLOATS_TAB_MANAGER
-import FlowToken from 0xFLOW_TOKEN
-import FungibleToken from 0xFUNGIBLE_TOKEN
-
-transaction(tabID: String, funderAddress: Address, amount: UFix64) {
-    prepare(signer: auth(Storage, Capabilities) &Account) {
-        // Find the Treasury FlowToken Vault with proper Withdraw Entitlements
-        let treasuryVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(from: /storage/flowTokenVault)
-            ?? panic("Could not borrow Treasury FlowToken Vault with Withdraw entitlement")
-
-        // Physically extract the exact USDC/FlowToken fiat amount required from the Treasury reserve
-        let extractedFunds <- treasuryVault.withdraw(amount: amount) 
-
-        // Hand the physical funds to the FloatsTabManager to instantly mint the available floats
-        FloatsTabManager.deposit(
-            tabID: tabID,
-            paymentVault: <-extractedFunds,
-            funderAddress: funderAddress
-        )
-    }
-}
-`;
+// Pre-load raw Cadence transaction text
+const CADENCE_CONSUME = loadTransaction('admin_consume_float');
+const CADENCE_DEPOSIT = loadTransaction('deposit_to_tab');
 
 // Execute the transaction using pure NodeJS and FCL (No CLI dependency!)
 async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
