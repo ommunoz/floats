@@ -13,12 +13,14 @@ fcl.config({
   "0xFUNGIBLE_TOKEN": "0xee82856bf20e2aa6"
 });
 
-const ec = new EC('p256'); // Flow uses the NIST P-256 curve by default
+const ec = new EC('p256');
 
-const TREASURY_ADDRESS = '0xf8d6e0586b0a20c7'; // emulator-account
+// Standard addresses for Emulator
+const CONTRACT_ADDRESS = '0xf8d6e0586b0a20c7';
+const FUNGIBLE_TOKEN_ADDRESS = '0xee82856bf20e2aa6';
+const FLOW_TOKEN_ADDRESS = '0x0ae53cb6e3f42a79';
 
-// Flow private keys strictly must be 32 bytes (64 hex characters) with no '0x' prefix.
-// We clean the .env variable just in case.
+const TREASURY_ADDRESS = CONTRACT_ADDRESS; 
 const TREASURY_PRIVATE_KEY = (process.env.EMULATOR_PRIVATE_KEY || '').replace(/^0x/, '').trim();
 
 // Hash the message with SHA3-256 as required by Flow Emulator
@@ -34,8 +36,6 @@ const signWithKey = (privateKey, msgHex) => {
     const sig = key.sign(hashMsgHex(msgHex));
     
     // Flow requires EXACTLY 64 bytes for the signature (32 for r, 32 for s)
-    // The elliptic library's toArrayLike sometimes strips leading zeros resulting in 31-byte buffers
-    // We must ensure they are strictly zero-padded to 32 bytes
     const n = 32;
     const r = sig.r.toArrayLike(Buffer, "be", n);
     const s = sig.s.toArrayLike(Buffer, "be", n);
@@ -44,19 +44,35 @@ const signWithKey = (privateKey, msgHex) => {
 };
 
 // The official Authorization Function that FCL requires to act on behalf of an account.
-// This proves to the blockchain that we actually own the Treasury.
 const authorizationFunction = async (account) => {
     return {
         ...account,
         tempId: `${TREASURY_ADDRESS}-0`,
         addr: fcl.sansPrefix(TREASURY_ADDRESS),
-        keyId: 0, // In Flow, accounts can have multiple keys. The emulator-account defaults to keyId 0.
+        keyId: 0,
         signingFunction: async (signable) => {
             return {
                 addr: fcl.withPrefix(TREASURY_ADDRESS),
                 keyId: 0,
-                // Pass the raw transaction bytes into our P-256 signer
                 signature: signWithKey(TREASURY_PRIVATE_KEY, signable.message)
+            };
+        }
+    };
+};
+
+// Auth function for specific users (Managed Wallets)
+const createAuthFunction = (address, privateKey) => async (account) => {
+    return {
+        ...account,
+        tempId: `${address}-0`,
+        addr: fcl.sansPrefix(address),
+        keyId: 0,
+        signingFunction: async (signable) => {
+            return {
+                addr: fcl.withPrefix(address),
+                keyId: 0,
+                // Pass the raw transaction bytes into our P-256 signer
+                signature: signWithKey(privateKey, signable.message)
             };
         }
     };
@@ -66,55 +82,132 @@ const authorizationFunction = async (account) => {
 const loadTransaction = (name) => {
     const filePath = path.join(__dirname, '..', 'flow', 'transactions', `${name}.cdc`);
     if (!fs.existsSync(filePath)) {
-        console.warn(`Warning: Transaction file not found at ${filePath}.`);
+        console.warn(`Warning: Transaction file not found at ${filePath}. Ensure backend/flow/transactions/ exists.`);
         return "";
     }
     return fs.readFileSync(filePath, 'utf8')
-        .replace(/0xFLOATS_TAB_MANAGER/g, TREASURY_ADDRESS)
-        .replace(/0xFUNGIBLE_TOKEN/g, "0xee82856bf20e2aa6")
-        .replace(/0xFLOW_TOKEN/g, "0x0ae53cb6e3f42a79");
+        .replace(/0xFLOATS_TAB_MANAGER/g, CONTRACT_ADDRESS)
+        .replace(/0xFUNGIBLE_TOKEN/g, FUNGIBLE_TOKEN_ADDRESS)
+        .replace(/0xFLOW_TOKEN/g, FLOW_TOKEN_ADDRESS);
 };
 
-// Pre-load raw Cadence transaction text
-const CADENCE_CONSUME = loadTransaction('admin_consume_float');
+// Pre-load transactions on startup
+const CADENCE_JIT_CONSUME = loadTransaction('jit_consume_float');
+const CADENCE_CLAIM = loadTransaction('claim_float');
+const CADENCE_DISCARD = loadTransaction('discard_float');
 const CADENCE_DEPOSIT = loadTransaction('deposit_to_tab');
 
-// Execute the transaction using pure NodeJS and FCL (No CLI dependency!)
+// Helper to get a managed user's private key
+const getManagedKey = (address) => {
+    const keysPath = path.join(__dirname, '..', 'data', 'managed_keys.json');
+    if (!fs.existsSync(keysPath)) return null;
+    const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
+    const normalized = address.startsWith('0x') ? address : `0x${address}`;
+    return keys[normalized] || keys[address] || null;
+};
+
+// Execute the JIT consume transaction signing as THE USER (managed wallet)
+// This atomically: updates ledger + destroys receipt resource + emits FloatConsumed event
 async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
-  
-  const formattedAmount = spentAmount.toFixed(8); // UFix64 requires 8 decimal precision for safety
-  console.log(`Executing Cadence JIT Consume for ${tabID}: $${formattedAmount} via pure Node.js Payload...`);
+  const formattedAmount = spentAmount.toFixed(8);
+  console.log(`Executing JIT Consume for ${claimerAddress} at tab ${tabID} ($${formattedAmount})...`);
+
+  const userKey = getManagedKey(claimerAddress);
+  if (!userKey) {
+    throw new Error(`No managed key found for address: ${claimerAddress}. Cannot sign JIT consume.`);
+  }
+
+  const userAuth = createAuthFunction(claimerAddress, userKey);
 
   try {
     const transactionId = await fcl.mutate({
-      cadence: CADENCE_CONSUME,
+      cadence: CADENCE_JIT_CONSUME,
       args: (arg, t) => [
         arg(tabID, t.String),
-        arg(claimerAddress, t.Address),
         arg(formattedAmount, t.UFix64)
       ],
-      proposer: authorizationFunction,
+      // User signs as authorizer (has access to their storage)
+      // Treasury signs as payer (covers gas for the managed account)
+      proposer: userAuth,
       payer: authorizationFunction,
-      authorizations: [authorizationFunction],
+      authorizations: [userAuth],
       limit: 999
     });
 
     console.log(`FCL Mutate returned txId: ${transactionId}`);
     console.log(`Waiting for blockchain to seal...`);
     await fcl.tx(transactionId).onceSealed();
-    console.log(`Transaction successfully sealed on-chain!`);
+    console.log(`JIT Consume sealed! FloatConsumed event emitted on-chain.`);
 
     return transactionId;
   } catch (error) {
-    console.error("FCL Consume Failed:", error);
+    console.error("FCL JIT Consume Failed:", error);
+    throw new Error(error);
+  }
+}
+
+
+// Executes a claim on behalf of a managed user
+async function claimFloat(tabID, amount, claimerAddress, claimerPrivateKey) {
+  const formattedAmount = Number(amount).toFixed(8); // UFix64 requires 8 decimal precision
+  console.log(`Executing Cadence Claim for ${tabID}: $${formattedAmount} by ${claimerAddress} via pure Node.js Payload...`);
+
+  try {
+    const authFn = createAuthFunction(claimerAddress, claimerPrivateKey);
+    const transactionId = await fcl.mutate({
+      cadence: CADENCE_CLAIM,
+      args: (arg, t) => [
+        arg(tabID, t.String),
+        arg(formattedAmount, t.UFix64)
+      ],
+      proposer: authFn,
+      payer: authFn,
+      authorizations: [authFn],
+      limit: 999
+    });
+
+    console.log(`FCL Mutate returned txId: ${transactionId}`);
+    console.log(`Waiting for blockchain to seal...`);
+    await fcl.tx(transactionId).onceSealed();
+    console.log(`Claim transaction successfully sealed on-chain!`);
+
+    return transactionId;
+  } catch (error) {
+    console.error("FCL Claim Failed:", error);
+    throw new Error(error);
+  }
+}
+
+// Executes a discard (return) on behalf of a managed user
+async function discardFloat(claimerAddress, claimerPrivateKey) {
+  console.log(`Executing Cadence Discard for ${claimerAddress} via pure Node.js Payload...`);
+
+  try {
+    const authFn = createAuthFunction(claimerAddress, claimerPrivateKey);
+    const transactionId = await fcl.mutate({
+      cadence: CADENCE_DISCARD,
+      args: (arg, t) => [],
+      proposer: authFn,
+      payer: authFn,
+      authorizations: [authFn],
+      limit: 999
+    });
+
+    console.log(`FCL Mutate returned txId: ${transactionId}`);
+    console.log(`Waiting for blockchain to seal...`);
+    await fcl.tx(transactionId).onceSealed();
+    console.log(`Discard transaction successfully sealed on-chain!`);
+
+    return transactionId;
+  } catch (error) {
+    console.error("FCL Discard Failed:", error);
     throw new Error(error);
   }
 }
 
 // Executes a fiat deposit on the blockchain by programmatically withdrawing from the Treasury
 async function depositToTab(tabID, funderAddress, amountAmount) {
-  
-  const formattedAmount = amountAmount.toFixed(8); // UFix64 requires 8 decimal precision for safety
+  const formattedAmount = Number(amountAmount).toFixed(8); // UFix64 requires 8 decimal precision for safety
   console.log(`Executing Cadence Deposit for ${tabID}: $${formattedAmount} by ${funderAddress} via pure Node.js Payload...`);
 
   try {
@@ -145,5 +238,7 @@ async function depositToTab(tabID, funderAddress, amountAmount) {
 
 module.exports = {
   consumeFloatJIT,
+  claimFloat,
+  discardFloat,
   depositToTab
 };

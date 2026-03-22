@@ -150,7 +150,7 @@ const selectPreset = (amt: number) => {
   margin-bottom: 0.5rem;
   
   .currency-symbol {
-    font-size: 3.5rem;
+    font-size: 3rem;
     font-weight: 700;
     color: var(--foreground);
     margin-right: -0.25rem; 
@@ -158,7 +158,7 @@ const selectPreset = (amt: number) => {
   }
 
   .custom-amount-input {
-    font-size: 4rem;
+    font-size: 3rem;
     font-weight: 800;
     color: var(--floats-navy);
     background: transparent;

@@ -12,19 +12,23 @@
     "@onflow/fcl": "^1.21.9",
     "@stripe/stripe-js": "^4.0.0",
     "@types/leaflet": "^1.9.21",
+    "buffer": "^6.0.3",
+    "elliptic": "^6.6.1",
     "leaflet": "^1.9.4",
     "lucide-vue-next": "^0.577.0",
     "pinia": "^3.0.4",
     "sass": "^1.98.0",
+    "sha3": "^2.1.4",
     "vue": "^3.5.25",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.12.0",
     "@vitejs/plugin-vue": "^6.0.2",
     "@vue/tsconfig": "^0.8.1",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
+    "vite-plugin-node-polyfills": "^0.25.0",
     "vue-tsc": "^3.1.5"
   }
 }

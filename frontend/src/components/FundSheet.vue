@@ -125,7 +125,7 @@ const handleClose = () => {
 </script>
 
 <template>
-  <div class="fund-sheet-overlay" @click.self="handleClose">
+  <div class="fund-sheet-overlay">
     <div class="fund-sheet">
       <!-- Handle bar -->
       <div class="sheet-handle" @click="handleClose">

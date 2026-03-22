@@ -23,5 +23,8 @@
     "express": "^5.2.1",
     "sha3": "^2.1.4",
     "stripe": "^20.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

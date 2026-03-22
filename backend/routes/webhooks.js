@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { consumeFloatJIT, depositToTab } = require('../services/flow');
+const { resolvePendingTap, rejectPendingTap } = require('../lib/tapRegistry');
 
 // This endpoint receives all webhooks from the Stripe Dashboard
 router.post('/stripe', async (req, res) => {
@@ -46,12 +47,18 @@ router.post('/stripe', async (req, res) => {
             const txId = await consumeFloatJIT(merchantID, patronFlowAddress, fiatAmount);
             
             console.log(`Flow JIT Success! Transaction ID: ${txId}`);
+
+            // Notify any waiting simulate-tap request with the sealed txId
+            resolvePendingTap(patronFlowAddress, txId);
             
-            // 5. Reply to Stripe under 500ms: Approved! The fiat is now "owed" in Web3
+            // Reply to Stripe: Approved!
             return res.json({ approved: true });
 
         } catch (error) {
             console.error(`Flow JIT Failed (Likely no receipt or expired): ${error.message}`);
+            
+            // Reject the pending tap instantly so the frontend knows the tap failed
+            rejectPendingTap(patronFlowAddress, error);
             
             // Reply to Stripe: Declined! Insufficient Float Balance
             return res.json({ approved: false });

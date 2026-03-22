@@ -4,6 +4,9 @@ import "YieldVault"
 
 access(all) contract FloatsTabManager {
     
+    // --- Events ---
+    access(all) event FloatConsumed(tabID: String, claimerAddress: Address, spentAmount: UFix64)
+
     // --- The Master Dictionary ---
     // Single cohesive state grouping for all active tabs
     access(all) var tabs: {String: Tab}
@@ -336,6 +339,9 @@ access(all) contract FloatsTabManager {
         }
 
         self.tabs[tabID] = tab
+
+        // Emit the event so the Frontend can reactively transition to the Success screen
+        emit FloatConsumed(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
     }
 
     // Voluntarily return a float to the pool before expiration

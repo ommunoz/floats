@@ -1,0 +1,6 @@
+{
+  "watch": ["**/*.js", "**/*.cdc", "data/*.json"],
+  "ext": "js,cdc,json",
+  "ignore": ["node_modules", "data/managed_keys.json", "data/managed_cards.json"],
+  "delay": 200
+}

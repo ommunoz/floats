@@ -5,6 +5,7 @@ import type { Tab } from '../stores/tabs'
 const props = defineProps<{
   tab: Tab
   floatsAvailable: number
+  totalBalance: number
   healthStatus: Tab['healthStatus']
   isLoading?: boolean
 }>()
@@ -38,12 +39,16 @@ onMounted(() => {
       :style="{ height: `${currentFill}%` }"
     />
     <div class="content">
+      <div class="tab-funds-row">
+        TAB FUNDS: ${{ Math.floor(totalBalance) }}
+      </div>
       <div class="floats-amount">
         {{ floatsAvailable }}
       </div>
       <div class="label">
         {{ floatsAvailable === 1 ? 'float' : 'floats' }} available
       </div>
+
       <div class="sub-label">
         ${{ tab.floatValue }} per float · Must be at the shop to claim
       </div>
@@ -56,9 +61,9 @@ onMounted(() => {
 
 .pool-hero {
   position: relative;
-  border-radius: 0.75rem; // rounded-xl
-  border: 1px solid var(--border); // border-border
-  background: var(--card); // bg-card
+  border-radius: 0.75rem; 
+  border: 1px solid var(--border);
+  background: var(--card);
   overflow: hidden;
   transition: opacity 0.3s ease;
   
@@ -70,15 +75,18 @@ onMounted(() => {
   &.hero--open {
     .water-indicator { background: hsla(174, 100%, 35%, 0.12); }
     .floats-amount { color: var(--floats-teal); }
+    .tab-funds-row { color: var(--floats-teal); }
   }
 
   &.hero--low {
     .water-indicator { background: hsla(38, 92%, 50%, 0.12); }
     .floats-amount { color: var(--floats-amber); }
+    .tab-funds-row { color: var(--floats-amber); }
   }
 
   &.hero--empty {
     .floats-amount { color: #64748b; }
+    .tab-funds-row { color: var(--muted-foreground); }
   }
 
   .water-indicator {
@@ -92,29 +100,56 @@ onMounted(() => {
   .content {
     position: relative;
     z-index: 10;
-    padding: 1.25rem; // p-5
+    padding: 1.5rem 1.25rem 1.5rem 1.25rem;
     text-align: center;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem; // space-y-2
+    align-items: center;
+    gap: 0.25rem;
 
     .floats-amount {
-      font-size: 1.875rem; // text-3xl
-      font-weight: 700; // font-bold
-      letter-spacing: -0.025em; // tracking-tight
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
       font-variant-numeric: tabular-nums;
       transition: color 0.3s;
+      line-height: 1;
     }
 
     .label {
-      font-size: 0.875rem; // text-sm
-      font-weight: 500; // font-medium
-      color: var(--foreground); // text-foreground
+      font-size: 0.875rem; 
+      font-weight: 600;
+      color: var(--foreground);
+      margin-top: 0.25rem;
+    }
+
+    .tab-funds-row {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 0 0 0.5rem 0;
+      opacity: 0.9;
+      position: relative;
+      
+      // Fine little lines on sides to give it some "hero" weight
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      
+      &::before, &::after {
+        content: '';
+        height: 1px;
+        width: 1.5rem;
+        background: currentColor;
+        opacity: 0.2;
+      }
     }
 
     .sub-label {
-      font-size: 0.75rem; // text-xs
-      color: var(--muted-foreground); // text-muted-foreground
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      opacity: 0.6;
     }
   }
 }

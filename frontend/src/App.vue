@@ -4,6 +4,7 @@
     <SetupWarning v-if="authStore.isLoaded && authStore.hasSetupError" />
     <main v-else-if="authStore.isLoaded" class="app-main">
       <RouterView />
+      <ActiveFloatOverlay />
     </main>
   </div>
 </template>
@@ -13,6 +14,7 @@ import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import SetupWarning from './components/SetupWarning.vue'
+import ActiveFloatOverlay from './components/ActiveFloatOverlay.vue'
 
 const authStore = useAuthStore()
 

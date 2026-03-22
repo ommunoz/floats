@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -25,7 +26,10 @@ app.use('/api/webhooks', express.raw({ type: 'application/json' }), webhooks);
 app.use(express.json());
 
 const stripeRoutes = require('./routes/stripe.js');
+const flowRoutes = require('./routes/flow.js');
+
 app.use('/api', stripeRoutes);
+app.use('/api', flowRoutes);
 
 app.listen(port, () => {
     console.log(`Floats Treasury Server listening on port ${port}`);

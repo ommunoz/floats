@@ -1,13 +1,5 @@
 import * as fcl from '@onflow/fcl'
 import getTabScript from '../flow/scripts/get_tab.cdc?raw'
-import getActiveFloatScript from '../flow/scripts/get_active_float.cdc?raw'
-
-/* We use a fallback mock timestamp script if the real one isn't imported correctly */
-const mockTimestampScript = `
-access(all) fun main(): UFix64 {
-    return getCurrentBlock().timestamp
-}
-`
 
 const FLOAT_VALUE = 5
 
@@ -22,11 +14,6 @@ export interface FunderStats {
   totalFunded: number
 }
 
-export interface FloatData {
-  amount: number
-  expiresAt: number
-}
-
 export interface TabStruct {
   id: string
   merchantID: string
@@ -34,7 +21,7 @@ export interface TabStruct {
   totalConsumed: number
   pendingAmount: number
   yieldAccrued: number
-  activeFloats: Record<string, FloatData>
+  activeFloats: Record<string, { amount: number; expiresAt: number }>
   funders: Record<string, FunderStats>
   history: HistoryEvent[]
   redemptionCount: number
@@ -107,30 +94,5 @@ export async function fetchTab(tabId: string): Promise<{ struct: TabStruct, avai
     availableBalance,
     floatsAvailable,
     healthStatus: deriveHealthStatus(floatsAvailable)
-  }
-}
-
-export async function fetchActiveFloat(address: string): Promise<FloatData | null> {
-  const result = await fcl.query({
-    cadence: getActiveFloatScript,
-    args: (arg: any, t: any) => [arg(address, t.Address)],
-  })
-
-  if (!result) return null
-
-  return {
-    amount: parseFloat(result.amount),
-    expiresAt: parseFloat(result.expiresAt)
-  }
-}
-
-export async function fetchBlockTimestamp(): Promise<number> {
-  try {
-    const result = await fcl.query({
-      cadence: mockTimestampScript,
-    })
-    return parseFloat(result ?? '0')
-  } catch {
-    return Date.now() / 1000
   }
 }

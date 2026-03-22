@@ -5,6 +5,7 @@ const { execSync } = require('child_process');
 const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const ec = new EC('p256');
 const projectRoot = path.resolve(__dirname, '..');
@@ -42,7 +43,8 @@ const rawTabsData = readFileSync(tabsInputPath, 'utf-8');
 const tabs = JSON.parse(rawTabsData);
 
 const usersInputPath = path.join(__dirname, 'inputs', 'users.json');
-const actorsMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8'));
+const actorsMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8')).filter(u => !u.isDemoUser);
+const demoUsersMeta = [{ name: "Omar Muñoz" }]; // Separate array for demo users as requested
 
 // --- FCL Signing Helpers ---
 const hashMsgHex = (msgHex) => {
@@ -83,11 +85,10 @@ async function seed() {
     console.log(`\n🌊 Floats Demo Seeding Engine`);
     console.log(`------------------------------`);
 
-    // 1. Programmatically initialize Actors
-    console.log(`Step 1: Synchronizing & Funding Actors...`);
-    const actors = [];
+    // 1. Programmatically initialize Bot Actors
+    console.log(`Step 1: Synchronizing & Funding Bot Actors...`);
+    const bots = []; // These stay in-memory only
     const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false } };
-    const adminKeys = {};
     
     const fundTx = `
     import FungibleToken from 0xee82856bf20e2aa6
@@ -101,7 +102,7 @@ async function seed() {
     }`;
 
     for (const meta of actorsMeta) {
-        process.stdout.write(`  🌱 Preparing ${meta.name}... `);
+        process.stdout.write(`  🌱 Preparing Bot ${meta.name}... `);
         
         const keyPair = ec.genKeyPair();
         const priv = keyPair.getPrivate('hex');
@@ -123,10 +124,67 @@ async function seed() {
             });
             await fcl.tx(txId).onceSealed();
 
-            actors.push({ ...meta, addr, key: priv });
-            usersMap[addr] = { name: meta.name, isDemoUser: !!meta.isDemoUser };
-            adminKeys[addr] = { name: meta.name, privateKey: priv };
+            bots.push({ ...meta, addr, key: priv });
+            usersMap[addr] = { name: meta.name, isDemoUser: false };
             console.log(`✅ [${addr}] ($1000 Loaded)`);
+        } catch (e) {
+            console.log(`❌ ERROR: ${e.message}`);
+        }
+    }
+
+    // 1b. Initialize Demo User
+    console.log(`\nStep 1b: Synchronizing Demo User...`);
+    const demoUserActors = [];
+    const demoAdminKeys = {}; // These WILL be exported
+    const demoManagedCards = {};
+
+    for (const meta of demoUsersMeta) {
+        process.stdout.write(`  🌟 Preparing Demo User ${meta.name}... `);
+        
+        const keyPair = ec.genKeyPair();
+        const priv = keyPair.getPrivate('hex');
+        const pub = keyPair.getPublic('hex').slice(2);
+        
+        try {
+            const output = execSync(`flow accounts create --key ${pub} --network emulator`, { encoding: 'utf8', stdio: 'pipe' });
+            const addrMatch = output.match(/0x[a-fA-F0-9]+/);
+            if (!addrMatch) throw new Error("Could not parse address from CLI output");
+            const addr = fcl.withPrefix(addrMatch[0]);
+
+            // Fund demo user
+            const txId = await fcl.mutate({
+                cadence: fundTx,
+                args: (arg, t) => [arg(addr, t.Address), arg("1000.0", t.UFix64)],
+                proposer: serviceAuth,
+                payer: serviceAuth,
+                authorizations: [serviceAuth],
+                limit: 1000
+            });
+            await fcl.tx(txId).onceSealed();
+
+            // Issue Stripe Virtual Card for Demo User
+            console.log(`\n  💳 Issuing Stripe Card for ${meta.name}...`);
+            const cardholder = await stripe.issuing.cardholders.create({
+              name: meta.name,
+              email: `${meta.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+              phone_number: '+18880000000',
+              status: 'active',
+              type: 'individual',
+              billing: { address: { line1: '123 Test St', city: 'SF', state: 'CA', postal_code: '94111', country: 'US' } },
+            });
+
+            const card = await stripe.issuing.cards.create({
+              cardholder: cardholder.id,
+              type: 'virtual',
+              currency: 'usd',
+              metadata: { flowAddress: addr }
+            });
+
+            demoUserActors.push({ ...meta, addr, key: priv, stripeCardId: card.id });
+            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id };
+            demoAdminKeys[addr] = priv;
+            demoManagedCards[addr] = card.id;
+            console.log(`  ✅ Demo [${addr}] ($1000 Loaded + Card Issued: ${card.id})`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
         }
@@ -134,7 +192,6 @@ async function seed() {
 
     // Export internal debug data to /seed/outputs/
     writeFileSync(path.join(outputsDir, 'users.json'), JSON.stringify(usersMap, null, 2));
-    writeFileSync(path.join(outputsDir, 'admin_keys.json'), JSON.stringify(adminKeys, null, 2));
 
     // 2. Initialize Merchant Tabs
     console.log(`\nStep 2: Initializing Merchant Tabs...`);
@@ -197,8 +254,7 @@ async function seed() {
         }
 
         for (const action of actions) {
-            const communityActors = actors.filter(a => !a.isDemoUser);
-            const actor = communityActors[Math.floor(Math.random() * communityActors.length)];
+            const actor = bots[Math.floor(Math.random() * bots.length)];
             const value = tab.floatValue.toFixed(8);
 
             try {
@@ -265,6 +321,20 @@ async function seed() {
     
     console.log(`  📦 Exported sanitized tabs.json to frontend`);
     console.log(`  📦 Exported consolidated users.json to frontend`);
+
+    // 5. Clean Migration to Backend
+    console.log(`\nStep 5: Exporting Backend Credentials (DEMO USER ONLY)...`);
+    const backendDataDir = path.join(projectRoot, 'backend', 'data');
+    if (!existsSync(backendDataDir)) {
+        mkdirSync(backendDataDir, { recursive: true });
+    }
+    
+    writeFileSync(path.join(outputsDir, 'managed_keys.json'), JSON.stringify(demoAdminKeys, null, 2));
+    writeFileSync(path.join(outputsDir, 'managed_cards.json'), JSON.stringify(demoManagedCards, null, 2));
+
+    writeFileSync(path.join(backendDataDir, 'managed_keys.json'), JSON.stringify(demoAdminKeys, null, 2));
+    writeFileSync(path.join(backendDataDir, 'managed_cards.json'), JSON.stringify(demoManagedCards, null, 2));
+    console.log(`  📦 Exported clean managed_keys.json and managed_cards.json to backend/data/`);
 
     console.log(`\n🎉 SEEDING COMPLETE. Demo is live and configured cleanly.`);
 }
