@@ -274,7 +274,11 @@ async function seed() {
                     process.stdout.write(`    💰 ${actor.name} funding $${parseFloat(amount).toFixed(0)}... `);
                     const txId = await fcl.mutate({
                         cadence: depositTx,
-                        args: (arg, t) => [arg(tab.id, t.String), arg(amount, t.UFix64)],
+                        args: (arg, t) => [
+                            arg(tab.id, t.String), 
+                            arg(actor.addr, t.Address),
+                            arg(amount, t.UFix64)
+                        ],
                         proposer: authz(actor.addr, actor.key),
                         payer: authz(actor.addr, actor.key),
                         authorizations: [authz(actor.addr, actor.key)],

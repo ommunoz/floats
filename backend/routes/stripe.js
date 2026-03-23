@@ -4,6 +4,22 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const path = require('path');
 const fs = require('fs');
 const { registerPendingTap, cancelPendingTap } = require('../lib/tapRegistry');
+const { registerPendingDeposit, cancelPendingDeposit } = require('../lib/depositRegistry');
+
+router.post('/wait-for-deposit', async (req, res) => {
+    try {
+        const { paymentIntentId } = req.body;
+        if (!paymentIntentId) return res.status(400).json({ error: 'Missing paymentIntentId' });
+
+        const depositPromise = registerPendingDeposit(paymentIntentId);
+        const { txId } = await depositPromise;
+        
+        res.json({ success: true, txId });
+    } catch (error) {
+        cancelPendingDeposit(req.body?.paymentIntentId || '');
+        res.status(500).json({ error: error.message });
+    }
+});
 
 router.post('/create-payment-intent', async (req, res) => {
     try {

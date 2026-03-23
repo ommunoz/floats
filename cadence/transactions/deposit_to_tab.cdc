@@ -2,7 +2,7 @@ import "FloatsTabManager"
 import "FungibleToken"
 import "FlowToken"
 
-transaction(tabID: String, amount: UFix64) {
+transaction(tabID: String, funderAddress: Address, amount: UFix64) {
 
     prepare(signer: auth(Storage, Capabilities) &Account) {
         
@@ -15,7 +15,7 @@ transaction(tabID: String, amount: UFix64) {
         // --- 2. Physical Token Deposit ---
         // Pass the paymentVault containing actual FlowTokens directly into the contract.
         // The contract internally updates the explicit Tab Ledgers and Yield.
-        FloatsTabManager.deposit(tabID: tabID, paymentVault: <-paymentVault, funderAddress: signer.address)
+        FloatsTabManager.deposit(tabID: tabID, paymentVault: <-paymentVault, funderAddress: funderAddress)
     }
 
     execute {

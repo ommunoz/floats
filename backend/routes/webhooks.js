@@ -3,6 +3,7 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { consumeFloatJIT, depositToTab } = require('../services/flow');
 const { resolvePendingTap, rejectPendingTap } = require('../lib/tapRegistry');
+const { resolvePendingDeposit, rejectPendingDeposit } = require('../lib/depositRegistry');
 
 // This endpoint receives all webhooks from the Stripe Dashboard
 router.post('/stripe', async (req, res) => {
@@ -81,8 +82,15 @@ router.post('/stripe', async (req, res) => {
                 // Trigger the Flow Blockchain JIT Deposit
                 const txId = await depositToTab(merchantID, funderAddress, fiatAmount);
                 console.log(`Flow Deposit Success! Transaction ID: ${txId}`);
+                
+                // Resolve the pending frontend deposit request
+                resolvePendingDeposit(paymentIntent.id, txId);
             } catch (error) {
                 console.error(`Flow Deposit Failed: ${error.message}`);
+                
+                // Reject the pending frontend deposit request
+                rejectPendingDeposit(paymentIntent.id, error);
+                
                 // In production, you would trigger a Stripe refund here if the blockchain minting failed
             }
         }

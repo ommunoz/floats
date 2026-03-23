@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { loadStripe } from '@stripe/stripe-js'
+import * as fcl from '@onflow/fcl'
 import { useAuthStore } from '../stores/auth'
 import type { Tab } from '../stores/tabs'
 
@@ -77,7 +78,7 @@ const handleFund = async () => {
     const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
     if (!stripe) throw new Error('Stripe failed to load')
 
-    const { error } = await stripe.confirmCardPayment(data.clientSecret, {
+    const { paymentIntent, error } = await stripe.confirmCardPayment(data.clientSecret, {
       payment_method: {
         card: { token: 'tok_visa' },
         billing_details: { name: authStore.user?.name || 'Demo User' }
@@ -85,6 +86,31 @@ const handleFund = async () => {
     })
 
     if (error) throw new Error(error.message)
+
+    // Wait for the backend webhook to process the flow deposit
+    const waitRes = await fetch('http://localhost:3001/api/wait-for-deposit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentIntentId: paymentIntent.id })
+    })
+    
+    if (!waitRes.ok) {
+      const errData = await waitRes.json().catch(() => ({}))
+      throw new Error(errData.error || 'Blockchain deposit failed')
+    }
+
+    const { txId } = await waitRes.json()
+
+    // Wait for transaction to seal on-chain
+    await new Promise<void>((resolve, reject) => {
+      fcl.tx(txId).subscribe((tx: any) => {
+        if (fcl.tx.isSealed(tx)) {
+          resolve()
+        } else if (tx.errorMessage) {
+          reject(new Error(tx.errorMessage))
+        }
+      })
+    })
 
     step.value = 'success'
     emit('funded', numericAmount.value)
