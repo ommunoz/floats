@@ -35,6 +35,7 @@ const sortedLeaderboard = computed(() => {
       amount: stats.totalFunded
     }))
     .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5)
 })
 </script>
 

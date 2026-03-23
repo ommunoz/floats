@@ -99,13 +99,13 @@ const goCard = () => router.push('/card')
   background-color: hsl(var(--background) / 0.8);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid transparent;
-  padding: 0.75rem 1rem;
+  padding: 1rem; /* Reduced from 1.25rem */
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
 
   .back-btn {
-    padding: 0.25rem;
+    padding: 0.375rem;
     border-radius: 9999px;
     background: transparent;
     border: none;
@@ -120,15 +120,15 @@ const goCard = () => router.push('/card')
     }
     
     .icon {
-      width: 1.25rem;
-      height: 1.25rem;
+      width: 1.5rem;
+      height: 1.5rem;
       color: var(--foreground);
     }
   }
 
   .title {
-    font-weight: 600;
-    font-size: 1.125rem;
+    font-weight: 700;
+    font-size: 1.25rem;
     margin: 0;
   }
 }

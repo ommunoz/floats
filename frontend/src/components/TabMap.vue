@@ -215,8 +215,6 @@ onUnmounted(() => {
   width: 100%;
   flex: 1;
   min-height: 0; // Fixes flex child overflow
-  border-radius: 1.25rem;
-  overflow: hidden;
   border: 1px solid var(--border);
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
 }

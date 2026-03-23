@@ -42,7 +42,7 @@ const auth = useAuthStore()
         <!-- Right: Profile Avatar Link -->
         <div class="avatar-container">
           <RouterLink to="/profile" class="avatar-link">
-            <BaseAvatar :src="getAvatarUrl(auth.user?.address || 'user-01')" size="sm" />
+            <BaseAvatar :src="getAvatarUrl(auth.user?.address || 'user-01')" size="md" />
           </RouterLink>
         </div>
 
@@ -110,7 +110,7 @@ const auth = useAuthStore()
 
 .header-container {
   display: flex;
-  height: 3.5rem; /* 56px (h-14) */
+  height: 4rem; /* Reduced from 4.5rem */
   align-items: center;
   justify-content: space-between;
   padding: 0 1rem;
@@ -124,26 +124,26 @@ const auth = useAuthStore()
 }
 
 .wordmark-link {
-  font-size: 1.125rem; /* text-lg */
+  font-size: 1.25rem; /* Increased from 1.125rem */
   font-weight: 700;
   color: var(--floats-navy);
   letter-spacing: 0.025em;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
   text-decoration: none;
 }
 
 .logo-mark {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2rem; /* Increased from 1.5rem */
+  height: 2rem;
   border-radius: 9999px;
   background-color: var(--floats-teal);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white; /* white */
-  font-size: 0.75rem;
+  font-size: 1rem; /* Increased from 0.75rem */
   font-weight: bold;
 }
 
@@ -151,13 +151,13 @@ const auth = useAuthStore()
   display: flex;
   background-color: var(--muted); /* muted/50 */
   border-radius: 9999px;
-  padding: 0.125rem; /* p-0.5 */
+  padding: 0.25rem; /* Increased from 0.125rem */
 }
 
 .pill-item {
-  padding: 0.375rem 1rem; /* py-1.5 px-4 */
-  font-size: 0.75rem; /* text-xs */
-  font-weight: 500;
+  padding: 0.4375rem 1rem; /* Reduced horizontal padding to 1rem */
+  font-size: 0.8125rem;
+  font-weight: 600;
   border-radius: 9999px;
   cursor: pointer;
   transition: all 0.2s;
@@ -184,14 +184,19 @@ const auth = useAuthStore()
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem; /* w-8 */
-  height: 2rem; /* h-8 */
+  width: 2.75rem; /* Increased from 2.5rem */
+  height: 2.75rem;
   border-radius: 9999px;
-  border: 2px solid var(--border);
+  border: 2px solid var(--card);
   background-color: var(--muted);
   overflow: hidden;
   position: relative;
   text-decoration: none;
+
+  :deep(.base-avatar) {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
 }
 
 .avatar-fallback {

@@ -105,23 +105,26 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: var(--muted);
+  background: var(--floats-orange);
   border-radius: 0.75rem;
-  padding: 0.875rem 1rem;
+  padding: 1rem;
   text-align: center;
   gap: 0.25rem;
+  color: white;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
 
   .checkout-amount {
-    font-size: 2rem;
+    font-size: 2.5rem;
     font-weight: 800;
-    color: var(--floats-navy);
+    color: white;
     line-height: 1;
   }
 
   .checkout-label {
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
-    strong { color: var(--foreground); }
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+    strong { color: white; font-weight: 700; }
   }
 }
 
