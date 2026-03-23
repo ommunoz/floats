@@ -80,6 +80,10 @@ access(all) contract FloatsTabManager {
         access(all) var redemptionCount: UInt64
         access(all) var isActive: Bool
 
+        // HACKATHON ONLY: Tracks lifetime consumed floats per user for the demo Profile page
+        // In production, an off-chain indexer would query `FloatConsumed` events instead.
+        access(all) var lifetimeConsumedFloats: {Address: UInt64}
+
         init(id: String, merchantID: String) {
             self.id = id
             self.merchantID = merchantID
@@ -96,6 +100,7 @@ access(all) contract FloatsTabManager {
             self.history = []
             self.redemptionCount = 0
             self.isActive = true
+            self.lifetimeConsumedFloats = {}
         }
 
         // The single Source of Truth formula for Available Liquidity
@@ -331,6 +336,9 @@ access(all) contract FloatsTabManager {
 
         // 5. Update Metrics
         tab.incRedemptions()
+        
+        let currentConsumedCount = tab.lifetimeConsumedFloats[claimerAddress] ?? 0
+        tab.lifetimeConsumedFloats.insert(key: claimerAddress, currentConsumedCount + 1)
         
         let historyRecord = HistoryEvent(type: "consume", userAddress: claimerAddress, amount: spentAmount, timestamp: getCurrentBlock().timestamp)
         tab.history.append(historyRecord)

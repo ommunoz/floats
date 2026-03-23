@@ -28,7 +28,7 @@ import { getDisplayName, getAvatarUrl } from '../utils/demoIdentities'
 import { getRandomMockNote } from '../utils/mockNotes'
 import { useNotesStore } from '../stores/notes'
 import BaseAvatar from './BaseAvatar.vue'
-import { DollarSign, Gift, Zap } from 'lucide-vue-next'
+import { DollarSign, Ticket, Zap } from 'lucide-vue-next'
 
 const props = defineProps<{
   history: HistoryEvent[]
@@ -39,7 +39,7 @@ const notesStore = useNotesStore()
 function getEventIcon(type: string) {
   switch (type) {
     case 'fund': return DollarSign
-    case 'consume': return Gift
+    case 'consume': return Ticket
     default: return Zap
   }
 }

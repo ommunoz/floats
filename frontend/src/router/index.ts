@@ -20,6 +20,11 @@ const router = createRouter({
       path: '/tab/:id',
       name: 'tab',
       component: Tab
+    },
+    {
+      path: '/card',
+      name: 'card',
+      component: () => import('../pages/Card.vue')
     }
   ]
 })
