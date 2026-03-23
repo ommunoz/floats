@@ -44,7 +44,18 @@ const tabs = JSON.parse(rawTabsData);
 
 const usersInputPath = path.join(__dirname, 'inputs', 'users.json');
 const actorsMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8')).filter(u => !u.isDemoUser);
-const demoUsersMeta = [{ name: "Omar Muñoz" }]; // Separate array for demo users as requested
+const demoUsersMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8')).filter(u => u.isDemoUser);
+
+// --- Helpers ---
+
+
+
+
+
+
+
+
+
 
 // --- FCL Signing Helpers ---
 const hashMsgHex = (msgHex) => {
@@ -88,7 +99,7 @@ async function seed() {
     // 1. Programmatically initialize Bot Actors
     console.log(`Step 1: Synchronizing & Funding Bot Actors...`);
     const bots = []; // These stay in-memory only
-    const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false } };
+    const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false, gender: "other" } };
     
     const fundTx = `
     import FungibleToken from 0xee82856bf20e2aa6
@@ -125,7 +136,7 @@ async function seed() {
             await fcl.tx(txId).onceSealed();
 
             bots.push({ ...meta, addr, key: priv });
-            usersMap[addr] = { name: meta.name, isDemoUser: false };
+            usersMap[addr] = { name: meta.name, isDemoUser: false, gender: meta.gender };
             console.log(`✅ [${addr}] ($1000 Loaded)`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
@@ -181,7 +192,7 @@ async function seed() {
             });
 
             demoUserActors.push({ ...meta, addr, key: priv, stripeCardId: card.id });
-            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id };
+            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id, gender: meta.gender };
             demoAdminKeys[addr] = priv;
             demoManagedCards[addr] = card.id;
             console.log(`  ✅ Demo [${addr}] ($1000 Loaded + Card Issued: ${card.id})`);

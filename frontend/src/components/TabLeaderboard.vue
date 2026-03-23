@@ -10,7 +10,7 @@
         <span class="rank">
           {{ index + 1 }}
         </span>
-        <BaseAvatar :seed="c.address" size="sm" class="avatar" />
+        <BaseAvatar :src="getAvatarUrl(c.address)" class="avatar" />
         <span class="address">{{ getDisplayName(c.address) }}</span>
         <span class="amount">${{ c.amount }}</span>
       </div>
@@ -21,7 +21,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FunderStats } from '../services/tabs'
-import { getDisplayName } from '../utils/demoIdentities'
+import { getDisplayName, getAvatarUrl } from '../utils/demoIdentities'
 import BaseAvatar from './BaseAvatar.vue'
 
 const props = defineProps<{
@@ -71,12 +71,13 @@ const sortedLeaderboard = computed(() => {
     }
 
     .avatar {
-      height: 2rem;
-      width: 2rem;
+      height: 2.5rem !important;
+      width: 2.5rem !important;
       border-radius: 50%;
       background: var(--muted);
-      object-fit: cover;
+      flex-shrink: 0;
     }
+
 
     .address {
       font-size: 0.875rem;

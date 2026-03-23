@@ -4,6 +4,9 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRouter } from 'vue-router'
 import type { Tab } from '../stores/tabs'
+import { getAvatarUrl } from '../utils/demoIdentities'
+
+
 
 const props = defineProps<{
   tabs: Tab[]
@@ -77,20 +80,26 @@ const renderMarkers = () => {
     
     if (lat && lng) {
       const marker = L.marker([lat, lng], {
-        icon: createCustomIcon(tab.healthStatus)
+        icon: createCustomIcon(tab.healthStatus || 'open')
       }).addTo(map!)
 
       // Generate Avatar Stack HTML
       const seeds = tab.claimerAddresses && tab.claimerAddresses.length > 0 
         ? tab.claimerAddresses.slice(0, 3) 
-        : Array.from({ length: Math.min(tab.floatsGrabbed, 3) }).map((_, i) => `${tab.id}-${i}`)
+        : Array.from({ length: Math.min(tab.floatsGrabbed || 0, 3) }).map((_, i) => `${tab.id}-${i}`)
       
       // Generate Avatar Stack HTML (size matching sm BaseAvatar: 1.75rem)
       const avatarsHtml = seeds.map((seed, i) => `
         <div class="popup-avatar" style="left: ${i * 1.25}rem; z-index: ${10 - i};">
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}" />
+          <img src="${getAvatarUrl(seed)}" />
         </div>
       `).join('')
+
+
+
+
+
+
 
       const statusLabels = {
         open: 'Tab open',
@@ -110,7 +119,7 @@ const renderMarkers = () => {
           <div class="popup-body">
             <div class="popup-status-pill status--${tab.healthStatus}">
               <span class="status-dot"></span>
-              ${statusLabels[tab.healthStatus]}
+              ${statusLabels[tab.healthStatus || 'open']}
             </div>
             
             <div class="popup-info">
@@ -121,7 +130,7 @@ const renderMarkers = () => {
               </div>
             </div>
 
-            ${tab.floatsGrabbed > 0 ? `
+            ${(tab.floatsGrabbed || 0) > 0 ? `
               <div class="popup-social">
                 <div class="popup-avatar-stack">
                   ${avatarsHtml}

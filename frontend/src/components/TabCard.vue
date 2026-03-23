@@ -20,9 +20,10 @@
       </div>
 
       <div class="card-bottom" v-if="store.balancesLoaded && (tab.floatsGrabbed || 0) > 0">
-        <AvatarStack :seeds="dynamicSeeds" />
+        <AvatarStack :urls="dynamicUrls" />
         <span class="floats-count">{{ tab.floatsGrabbed }} {{ tab.floatsGrabbed === 1 ? 'float' : 'floats' }} grabbed</span>
       </div>
+
     </div>
   </button>
 </template>
@@ -34,22 +35,24 @@ import TabStatusPill from './TabStatusPill.vue'
 import { MapPin } from 'lucide-vue-next'
 import type { Tab } from '../stores/tabs'
 import { useTabsStore } from '../stores/tabs'
+import { getAvatarUrl } from '../utils/demoIdentities'
 
 const props = defineProps<{ tab: Tab }>()
 const store = useTabsStore()
 
-const dynamicSeeds = computed(() => {
+const dynamicUrls = computed(() => {
+  let seeds = []
   // 1. If we have real on-chain claimers, use those first
   if (props.tab.claimerAddresses && props.tab.claimerAddresses.length > 0) {
-    return props.tab.claimerAddresses
+    seeds = props.tab.claimerAddresses
+  } else {
+    // 2. Fallback to deterministic placeholders based on ID
+    const grabs = props.tab.floatsGrabbed || 0
+    seeds = Array.from({ length: grabs }).map((_, i) => `${props.tab.id}-${i}`)
   }
-
-  // 2. Fallback to deterministic placeholders based on ID
-  const grabs = props.tab.floatsGrabbed || 0
-  return Array.from({ length: grabs }).map((_, i) => 
-    `${props.tab.id}-${i}`
-  )
+  return seeds.map(seed => getAvatarUrl(seed))
 })
+
 </script>
 
 <style lang="scss" scoped>

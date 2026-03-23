@@ -1,22 +1,18 @@
 <template>
   <div class="base-avatar" :class="[`size-${size}`, { 'has-border': border }]">
-    <img :src="url" alt="avatar" class="avatar-img" />
+    <img :src="src" alt="avatar" class="avatar-img" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-
-const props = withDefaults(defineProps<{
-  seed: string
+withDefaults(defineProps<{
+  src: string
   size?: 'xs' | 'sm' | 'md' | 'lg'
   border?: boolean
 }>(), {
   size: 'md',
   border: false
 })
-
-const url = computed(() => `https://api.dicebear.com/7.x/avataaars/svg?seed=${props.seed}`)
 </script>
 
 <style lang="scss" scoped>
@@ -43,6 +39,7 @@ const url = computed(() => `https://api.dicebear.com/7.x/avataaars/svg?seed=${pr
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transform: scale(1.1);
   }
 }
 </style>

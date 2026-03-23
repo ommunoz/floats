@@ -11,7 +11,7 @@
         </div>
         <div class="event-details">
           <div class="event-header">
-            <BaseAvatar :seed="event.userAddress" size="xs" class="avatar" />
+            <BaseAvatar :src="getAvatarUrl(event.userAddress)" class="avatar" />
             <span class="address">{{ getDisplayName(event.userAddress) }}</span>
             <span class="action">{{ getEventDescription(event) }}</span>
           </div>
@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import type { HistoryEvent } from '../services/tabs'
-import { getDisplayName } from '../utils/demoIdentities'
+import { getDisplayName, getAvatarUrl } from '../utils/demoIdentities'
 import { getRandomMockNote } from '../utils/mockNotes'
 import { useNotesStore } from '../stores/notes'
 import BaseAvatar from './BaseAvatar.vue'
@@ -116,11 +116,12 @@ function getEventDescription(event: HistoryEvent) {
         gap: 0.5rem;
 
         .avatar {
-          height: 1.25rem;
-          width: 1.25rem;
+          height: 1.75rem !important;
+          width: 1.75rem !important;
           border-radius: 50%;
-          object-fit: cover;
+          flex-shrink: 0;
         }
+
 
         .address {
           font-size: 0.875rem;

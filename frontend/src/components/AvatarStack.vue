@@ -1,9 +1,9 @@
 <template>
   <div class="avatar-stack">
     <BaseAvatar
-      v-for="(seed, i) in shown"
+      v-for="(url, i) in shown"
       :key="i"
-      :seed="seed"
+      :src="url"
       :size="size"
       border
       class="stack-item"
@@ -19,7 +19,7 @@ import { computed } from 'vue'
 import BaseAvatar from './BaseAvatar.vue'
 
 const props = withDefaults(defineProps<{
-  seeds: string[]
+  urls: string[]
   max?: number
   size?: 'sm' | 'md'
 }>(), {
@@ -27,8 +27,8 @@ const props = withDefaults(defineProps<{
   size: 'sm',
 })
 
-const shown = computed(() => props.seeds.slice(0, props.max))
-const overflow = computed(() => props.seeds.length - props.max)
+const shown = computed(() => props.urls.slice(0, props.max))
+const overflow = computed(() => props.urls.length - props.max)
 </script>
 
 <style lang="scss" scoped>

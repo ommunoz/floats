@@ -1,8 +1,9 @@
 [
-  { "name": "Omar Muñoz", "isDemoUser": true },
-  { "name": "Sarah Chen" },
-  { "name": "Marcus Aurelius" },
-  { "name": "Bastian Schwein" },
-  { "name": "Toby Flenderson" },
-  { "name": "Elena Gilbert" }
+  { "name": "Omar Muñoz", "isDemoUser": true, "gender": "male" },
+  { "name": "Sarah Chen", "gender": "female" },
+  { "name": "Marcus Aurelius", "gender": "male" },
+  { "name": "Bastian Schwein", "gender": "male" },
+  { "name": "Toby Flenderson", "gender": "male" },
+  { "name": "Elena Gilbert", "gender": "female" }
 ]
+

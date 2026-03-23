@@ -3,9 +3,12 @@ import { RouterLink } from 'vue-router'
 import TabCard from '../components/TabCard.vue'
 import TabMap from '../components/TabMap.vue'
 import BaseAvatar from '../components/BaseAvatar.vue'
+import { getAvatarUrl } from '../utils/demoIdentities'
 import { useTabsStore } from '../stores/tabs'
+import { useAuthStore } from '../stores/auth'
 
 const store = useTabsStore()
+const auth = useAuthStore()
 </script>
 
 <template>
@@ -39,7 +42,7 @@ const store = useTabsStore()
         <!-- Right: Profile Avatar Link -->
         <div class="avatar-container">
           <RouterLink to="/profile" class="avatar-link">
-            <BaseAvatar seed="user-01" size="sm" />
+            <BaseAvatar :src="getAvatarUrl(auth.user?.address || 'user-01')" size="sm" />
           </RouterLink>
         </div>
 
