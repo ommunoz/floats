@@ -32,19 +32,24 @@ access(all) contract FloatsTabManager {
 
     access(all) struct FunderStats {
         access(all) var totalFunded: UFix64
+        access(all) var tier: String
         
         init(totalFunded: UFix64) {
             self.totalFunded = totalFunded
+            self.tier = "Supporter"
+            if totalFunded >= 100.0 { self.tier = "Legend" }
+            else if totalFunded >= 50.0 { self.tier = "Hero" }
         }
 
         access(contract) fun addFunding(_ amount: UFix64) {
             self.totalFunded = self.totalFunded + amount
+            if self.totalFunded >= 100.0 { self.tier = "Legend" }
+            else if self.totalFunded >= 50.0 { self.tier = "Hero" }
+            else { self.tier = "Supporter" }
         }
 
         access(all) view fun getTier(): String {
-            if self.totalFunded >= 100.0 { return "Hero" }
-            if self.totalFunded >= 50.0 { return "Champion" }
-            return "Supporter"
+            return self.tier
         }
     }
 

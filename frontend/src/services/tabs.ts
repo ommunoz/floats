@@ -12,6 +12,7 @@ export interface HistoryEvent {
 
 export interface FunderStats {
   totalFunded: number
+  tier: string
 }
 
 export interface TabStruct {
@@ -82,7 +83,8 @@ export async function fetchTab(tabId: string): Promise<{ struct: TabStruct, avai
 
   for (const address of Object.keys(result.funders || {})) {
     struct.funders[address] = {
-      totalFunded: parseFloat(result.funders[address].totalFunded)
+      totalFunded: parseFloat(result.funders[address].totalFunded),
+      tier: result.funders[address].tier || 'Supporter'
     }
   }
 
