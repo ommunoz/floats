@@ -136,7 +136,7 @@ async function seed() {
             await fcl.tx(txId).onceSealed();
 
             bots.push({ ...meta, addr, key: priv });
-            usersMap[addr] = { name: meta.name, isDemoUser: false, gender: meta.gender };
+            usersMap[addr] = { name: meta.name, isDemoUser: false, gender: meta.gender, avatarUrl: meta.avatarUrl };
             console.log(`✅ [${addr}] ($1000 Loaded)`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
@@ -192,7 +192,7 @@ async function seed() {
             });
 
             demoUserActors.push({ ...meta, addr, key: priv, stripeCardId: card.id });
-            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id, gender: meta.gender };
+            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id, gender: meta.gender, avatarUrl: meta.avatarUrl };
             demoAdminKeys[addr] = priv;
             demoManagedCards[addr] = card.id;
             console.log(`  ✅ Demo [${addr}] ($1000 Loaded + Card Issued: ${card.id})`);

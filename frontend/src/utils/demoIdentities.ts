@@ -2,6 +2,7 @@ interface UserIdentity {
   name: string
   isDemoUser: boolean
   gender?: string
+  avatarUrl?: string
 }
 
 let users: Record<string, UserIdentity> = {}
@@ -18,7 +19,11 @@ export function getDisplayName(address: string): string {
 export function getAvatarUrl(addressOrSeed: string): string {
   const normalized = addressOrSeed.startsWith('0x') ? addressOrSeed : `0x${addressOrSeed}`
   const user = users[normalized]
+  
+  if (user?.avatarUrl) return user.avatarUrl
+  
   const gender = user?.gender || 'other'
+
   const seedForUrl = user?.name || addressOrSeed
 
   const bgColorsArray = ['d0c3f1', 'e9f9e5', 'ceeef8', 'ffd7ee', 'fef1ab', 'ffadad', 'ffd6a5']
