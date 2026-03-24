@@ -75,7 +75,7 @@ access(all) contract FloatsTabManager {
         access(all) var pendingAmount: UFix64
         
         // Off-Chain Settlement Tracking for the Merchant
-        access(all) var pendingRevenuePayouts: UFix64
+        access(all) var reimbursementOwed: UFix64
         access(all) var yieldAccrued: UFix64
 
         // State Tracking (The Rolodex)
@@ -97,7 +97,7 @@ access(all) contract FloatsTabManager {
             self.totalConsumed = 0.0
             self.pendingAmount = 0.0
             
-            self.pendingRevenuePayouts = 0.0
+            self.reimbursementOwed = 0.0
             self.yieldAccrued = 0.0
 
             self.activeFloats = {}
@@ -110,7 +110,8 @@ access(all) contract FloatsTabManager {
 
         // The single Source of Truth formula for Available Liquidity
         access(all) view fun getAvailableBalance(): UFix64 {
-            return self.totalFunded - self.totalConsumed - self.pendingAmount
+            // Now includes yield! Every cent of yield is spent as a Float for the community.
+            return (self.totalFunded + self.yieldAccrued) - self.totalConsumed - self.pendingAmount
         }
 
         // --- Mutating Helpers for Cadence 1.0 Access Strictness ---
@@ -118,8 +119,8 @@ access(all) contract FloatsTabManager {
         access(contract) fun addPending(_ amount: UFix64) { self.pendingAmount = self.pendingAmount + amount }
         access(contract) fun deductPending(_ amount: UFix64) { self.pendingAmount = self.pendingAmount - amount }
         access(contract) fun addConsumed(_ amount: UFix64) { self.totalConsumed = self.totalConsumed + amount }
-        access(contract) fun addRevenue(_ amount: UFix64) { self.pendingRevenuePayouts = self.pendingRevenuePayouts + amount }
-        access(contract) fun deductRevenue(_ amount: UFix64) { self.pendingRevenuePayouts = self.pendingRevenuePayouts - amount }
+        access(contract) fun addReimbursement(_ amount: UFix64) { self.reimbursementOwed = self.reimbursementOwed + amount }
+        access(contract) fun deductReimbursement(_ amount: UFix64) { self.reimbursementOwed = self.reimbursementOwed - amount }
         access(contract) fun updateYield(yieldVaultAccrued: UFix64) {
             self.yieldAccrued = self.yieldAccrued + yieldVaultAccrued
         }
@@ -337,7 +338,7 @@ access(all) contract FloatsTabManager {
         // 4. Update Explicit Ledgers
         tab.deductPending(floatData.amount)
         tab.addConsumed(spentAmount)
-        tab.addRevenue(spentAmount)
+        tab.addReimbursement(spentAmount)
 
         // 5. Update Metrics
         tab.incRedemptions()
@@ -402,10 +403,10 @@ access(all) contract FloatsTabManager {
     }
 
     // Off-Chain Settlement
-    access(all) fun adminWithdrawPayout(tabID: String, amount: UFix64, isYield: Bool, receiver: &{FungibleToken.Receiver}) {
+    access(all) fun reclaimReimbursement(tabID: String, amount: UFix64, isYield: Bool, receiver: &{FungibleToken.Receiver}) {
         pre {
             self.tabs[tabID] != nil: "Tab does not exist"
-            (isYield ? self.tabs[tabID]!.yieldAccrued : self.tabs[tabID]!.pendingRevenuePayouts) >= amount: "Cannot withdraw more than is owed"
+            (isYield ? self.tabs[tabID]!.yieldAccrued : self.tabs[tabID]!.reimbursementOwed) >= amount: "Cannot withdraw more than is owed"
         }
         
         var updatedTab = self.tabs[tabID]!
@@ -413,7 +414,7 @@ access(all) contract FloatsTabManager {
         if isYield {
             updatedTab.deductYield(amount)
         } else {
-            updatedTab.deductRevenue(amount)
+            updatedTab.deductReimbursement(amount)
         }
 
         self.tabs[tabID] = updatedTab

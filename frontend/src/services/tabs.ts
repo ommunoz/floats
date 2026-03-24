@@ -21,6 +21,7 @@ export interface TabStruct {
   totalFunded: number
   totalConsumed: number
   pendingAmount: number
+  reimbursementOwed: number
   yieldAccrued: number
   activeFloats: Record<string, { amount: number; expiresAt: number }>
   funders: Record<string, FunderStats>
@@ -57,6 +58,7 @@ export async function fetchTab(tabId: string): Promise<{ struct: TabStruct, avai
     totalFunded: parseFloat(result.totalFunded),
     totalConsumed: parseFloat(result.totalConsumed),
     pendingAmount: parseFloat(result.pendingAmount),
+    reimbursementOwed: parseFloat(result.reimbursementOwed),
     yieldAccrued: parseFloat(result.yieldAccrued),
     activeFloats: {},
     funders: {},
@@ -88,7 +90,8 @@ export async function fetchTab(tabId: string): Promise<{ struct: TabStruct, avai
     }
   }
 
-  const availableBalance = struct.totalFunded - struct.totalConsumed - struct.pendingAmount + expiredFundsToAdd
+  // UPDATED: Available balance now includes Yield!
+  const availableBalance = (struct.totalFunded + struct.yieldAccrued) - struct.totalConsumed - struct.pendingAmount + expiredFundsToAdd
   const floatsAvailable = Math.floor(availableBalance / FLOAT_VALUE)
 
   return {

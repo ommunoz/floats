@@ -40,7 +40,7 @@ onMounted(() => {
     />
     <div class="content">
       <div class="tab-funds-row">
-        TAB FUNDS: ${{ Math.floor(totalBalance) }}
+        TAB FUNDS: ${{ totalBalance.toFixed(2) }}
       </div>
       <div class="floats-amount">
         {{ floatsAvailable }}
@@ -50,7 +50,7 @@ onMounted(() => {
       </div>
 
       <div class="sub-label">
-        ${{ tab.floatValue }} per float · Must be at the shop to claim
+        ${{ tab.floatValue.toFixed(2) }} per float · Must be at the shop to claim
       </div>
     </div>
   </div>

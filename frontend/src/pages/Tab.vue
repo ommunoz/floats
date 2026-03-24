@@ -30,6 +30,7 @@ const leaderboard = ref<Record<string, FunderStats>>({})
 const healthStatus = ref<Tab['healthStatus'] | null>(null)
 const floatsAvailable = ref(0)
 const totalBalance = ref(0)
+const yieldAccrued = ref(0)
 const isLoading = ref(true)
 const isFirstLoad = ref(true)
 
@@ -68,6 +69,7 @@ onMounted(async () => {
       healthStatus.value = tabData.healthStatus
       floatsAvailable.value = tabData.floatsAvailable
       totalBalance.value = tabData.availableBalance
+      yieldAccrued.value = tabData.struct.yieldAccrued
       history.value = tabData.struct.history
       leaderboard.value = tabData.struct.funders
     }
@@ -91,6 +93,7 @@ const refreshTabData = async () => {
       healthStatus.value = tabData.healthStatus
       floatsAvailable.value = tabData.floatsAvailable
       totalBalance.value = tabData.availableBalance
+      yieldAccrued.value = tabData.struct.yieldAccrued
       history.value = tabData.struct.history
       leaderboard.value = tabData.struct.funders
     }

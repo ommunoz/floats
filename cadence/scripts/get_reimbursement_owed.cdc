@@ -4,7 +4,7 @@ import FloatsTabManager from 0xFLOATS_TAB_MANAGER
 // for Floats that have been officially consumed via the Stripe JIT Authorizer.
 access(all) fun main(tabID: String): UFix64 {
     if let tab = FloatsTabManager.tabs[tabID] {
-        return tab.pendingRevenuePayouts
+        return tab.reimbursementOwed
     }
     return 0.0
 }
