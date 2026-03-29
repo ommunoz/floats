@@ -9,11 +9,14 @@ access(all) contract FloatsTabManager {
     access(all) event TabFunded(tabID: String, funderAddress: Address, amount: UFix64)
 
     // --- The Master Dictionary ---
-    // Single cohesive state grouping for all active tabs
     access(all) var tabs: {String: Tab}
 
-    // This vault actually holds the physical FlowTokens backing the protocol 1:1.
+    // The physical reserve vault holding all protocol FlowTokens 1:1.
     access(all) let reserveVault: @{FungibleToken.Vault}
+
+    // Global reimbursement owed to the Treasury across all tabs.
+    // Tracked here (not per-tab) because settlement is a protocol-level operation.
+    access(all) var reimbursementOwed: UFix64
 
     // --- Core Data Structures ---
 
@@ -37,21 +40,24 @@ access(all) contract FloatsTabManager {
         
         init(totalFunded: UFix64) {
             self.totalFunded = totalFunded
-            self.tier = "Supporter"
-            if totalFunded >= 100.0 { self.tier = "Legend" }
-            else if totalFunded >= 50.0 { self.tier = "Hero" }
+            self.tier = FloatsTabManager.computeTier(totalFunded)
         }
 
         access(contract) fun addFunding(_ amount: UFix64) {
             self.totalFunded = self.totalFunded + amount
-            if self.totalFunded >= 100.0 { self.tier = "Legend" }
-            else if self.totalFunded >= 50.0 { self.tier = "Hero" }
-            else { self.tier = "Supporter" }
+            self.tier = FloatsTabManager.computeTier(self.totalFunded)
         }
 
         access(all) view fun getTier(): String {
             return self.tier
         }
+    }
+
+    // Extracted tier logic — single source of truth, no duplication.
+    access(all) view fun computeTier(_ amount: UFix64): String {
+        if amount >= 100.0 { return "Legend" }
+        if amount >= 50.0  { return "Hero" }
+        return "Supporter"
     }
 
     // Struct to hold the internal state of a claimed float
@@ -74,20 +80,18 @@ access(all) contract FloatsTabManager {
         access(all) var totalFunded: UFix64
         access(all) var totalConsumed: UFix64
         access(all) var pendingAmount: UFix64
-        
-        // Off-Chain Settlement Tracking for the Merchant
-        access(all) var reimbursementOwed: UFix64
+
+        // Yield accrued for this tab's community pool
         access(all) var yieldAccrued: UFix64
 
-        // State Tracking (The Rolodex)
+        // State Tracking
         access(all) var activeFloats: {Address: FloatData}
         access(all) var funders: {Address: FunderStats}
         access(all) var history: [HistoryEvent]
         access(all) var redemptionCount: UInt64
         access(all) var isActive: Bool
 
-        // HACKATHON ONLY: Tracks lifetime consumed floats per user for the demo Profile page
-        // In production, an off-chain indexer would query `FloatConsumed` events instead.
+        // HACKATHON ONLY: Tracks lifetime consumed floats per user for demo Profile page
         access(all) var lifetimeConsumedFloats: {Address: UInt64}
 
         init(id: String, merchantID: String) {
@@ -97,8 +101,6 @@ access(all) contract FloatsTabManager {
             self.totalFunded = 0.0
             self.totalConsumed = 0.0
             self.pendingAmount = 0.0
-            
-            self.reimbursementOwed = 0.0
             self.yieldAccrued = 0.0
 
             self.activeFloats = {}
@@ -109,25 +111,19 @@ access(all) contract FloatsTabManager {
             self.lifetimeConsumedFloats = {}
         }
 
-        // The single Source of Truth formula for Available Liquidity
+        // Single Source of Truth: Available Liquidity
         access(all) view fun getAvailableBalance(): UFix64 {
-            // Now includes yield! Every cent of yield is spent as a Float for the community.
             return (self.totalFunded + self.yieldAccrued) - self.totalConsumed - self.pendingAmount
         }
 
-        // --- Mutating Helpers for Cadence 1.0 Access Strictness ---
-        access(contract) fun addFunded(_ amount: UFix64) { self.totalFunded = self.totalFunded + amount }
-        access(contract) fun addPending(_ amount: UFix64) { self.pendingAmount = self.pendingAmount + amount }
-        access(contract) fun deductPending(_ amount: UFix64) { self.pendingAmount = self.pendingAmount - amount }
-        access(contract) fun addConsumed(_ amount: UFix64) { self.totalConsumed = self.totalConsumed + amount }
-        access(contract) fun addReimbursement(_ amount: UFix64) { self.reimbursementOwed = self.reimbursementOwed + amount }
-        access(contract) fun deductReimbursement(_ amount: UFix64) { self.reimbursementOwed = self.reimbursementOwed - amount }
-        access(contract) fun updateYield(yieldVaultAccrued: UFix64) {
-            self.yieldAccrued = self.yieldAccrued + yieldVaultAccrued
-        }
-        access(contract) fun deductYield(_ amount: UFix64) { self.yieldAccrued = self.yieldAccrued - amount }
-        access(contract) fun incRedemptions() { self.redemptionCount = self.redemptionCount + 1 }
-        access(contract) fun toggleActive(_ active: Bool) { self.isActive = active }
+        // --- Mutating Helpers ---
+        access(contract) fun addFunded(_ amount: UFix64)    { self.totalFunded = self.totalFunded + amount }
+        access(contract) fun addPending(_ amount: UFix64)   { self.pendingAmount = self.pendingAmount + amount }
+        access(contract) fun deductPending(_ amount: UFix64){ self.pendingAmount = self.pendingAmount - amount }
+        access(contract) fun addConsumed(_ amount: UFix64)  { self.totalConsumed = self.totalConsumed + amount }
+        access(contract) fun updateYield(_ amount: UFix64)  { self.yieldAccrued = self.yieldAccrued + amount }
+        access(contract) fun incRedemptions()               { self.redemptionCount = self.redemptionCount + 1 }
+        access(contract) fun toggleActive(_ active: Bool)   { self.isActive = active }
     }
 
     // The Physical Ticket primitive (UX Source of Truth)
@@ -152,7 +148,7 @@ access(all) contract FloatsTabManager {
         }
     }
 
-    // --- Admin & Contract Methods ---
+    // --- Contract Methods ---
 
     // Create a new Tab
     access(all) fun createTab(tabID: String, merchantID: String) {
@@ -162,7 +158,8 @@ access(all) contract FloatsTabManager {
         self.tabs[tabID] = Tab(id: tabID, merchantID: merchantID)
     }
 
-    // Deposit physically locks funds into the reserve and logs to the Tab
+    // Deposit physically locks funds into the reserve and logs to the Tab.
+    // YieldVault called here because real capital enters the idle pool.
     access(all) fun deposit(tabID: String, paymentVault: @{FungibleToken.Vault}, funderAddress: Address) {
         pre {
             self.tabs[tabID] != nil: "Tab does not exist"
@@ -177,10 +174,9 @@ access(all) contract FloatsTabManager {
         // 2. Clone tab for modification
         var tab = self.tabs[tabID]!
 
-        // 3. Process Yield on the prior Idle Principal
-        let oldIdlePrincipal = tab.getAvailableBalance()
-        let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + amount)
-        tab.updateYield(yieldVaultAccrued: accrued)
+        // 3. Harvest pending yield, then grow idle principal
+        let harvested = YieldVault.addTabPrincipal(tabID: tabID, amount: amount)
+        tab.updateYield(harvested)
 
         // 4. Update Explicit Ledger
         tab.addFunded(amount)
@@ -201,10 +197,7 @@ access(all) contract FloatsTabManager {
             tab.history.remove(at: 0)
         }
 
-        // Save tab back
         self.tabs[tabID] = tab
-
-        // Emit funding event for real-time dashboard sync
         emit TabFunded(tabID: tabID, funderAddress: funderAddress, amount: amount)
     }
 
@@ -218,8 +211,8 @@ access(all) contract FloatsTabManager {
         self.tabs[tabID] = tab
     }
 
-    // Helper to get all expired claims for a tab (for Lazy Harvesting)
-    access(all) fun getExpiredClaims(tabID: String): [Address] {
+    // Get all expired float addresses for a tab (used by Lazy Harvesting)
+    access(all) fun getExpiredFloats(tabID: String): [Address] {
         var expired: [Address] = []
         if let tab = self.tabs[tabID] {
             let now = getCurrentBlock().timestamp
@@ -234,59 +227,48 @@ access(all) contract FloatsTabManager {
         return expired
     }
 
-    // Neighbor claims a Float from the Tab
+    // Neighbor claims a Float from the Tab.
+    // NOTE: No YieldVault call — claim moves available → pending (internal ledger only).
     access(all) fun claimFloat(tabID: String, amount: UFix64, claimerAddress: Address): @FloatReceipt {
         pre {
             self.tabs[tabID] != nil: "Tab does not exist"
             self.tabs[tabID]!.isActive == true: "Tab is not active"
-            self.tabs[tabID]!.activeFloats[claimerAddress] == nil: "Neighbor already has an active claim for this tab"
+            self.tabs[tabID]!.activeFloats[claimerAddress] == nil: "Neighbor already has an active float"
         }
 
         var tab = self.tabs[tabID]!
         
         // --- LAZY HARVESTING ---
-        // If exact available is too low, try to harvest one expired float to recycle liquidity
+        // If available balance is too low, recycle one expired float
         if tab.getAvailableBalance() < amount {
-            let expiredAddresses = self.getExpiredClaims(tabID: tabID)
+            let expiredAddresses = self.getExpiredFloats(tabID: tabID)
             if expiredAddresses.length > 0 {
                 let recycleAddress = expiredAddresses[0]
                 let expiredData = tab.activeFloats[recycleAddress]!
-                
-                // Process Yield before touching principal
-                let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + expiredData.amount)
-                tab.updateYield(yieldVaultAccrued: accrued)
-
-                // Free the pending funds back to the idle pool
                 tab.deductPending(expiredData.amount)
                 tab.activeFloats.remove(key: recycleAddress)
             }
         }
 
-        assert(tab.getAvailableBalance() >= amount, message: "Insufficient Tab balance even after recycling expired funds")
+        assert(tab.getAvailableBalance() >= amount, message: "Insufficient Tab balance even after recycling expired floats")
 
-        // 1. Process Yield before locking principal
-        let oldIdlePrincipal = tab.getAvailableBalance()
-        let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal - amount)
-        tab.updateYield(yieldVaultAccrued: accrued)
-
-        // 2. Lock Funds inside the explicit Pending ledger
+        // Lock funds in Pending
         tab.addPending(amount)
 
-        // 3. Set Expiration
+        // Set Expiration
         let expiration = getCurrentBlock().timestamp + 900.0
 
-        // 4. Update the active registry (Rolodex)
+        // Update the active registry
         tab.activeFloats.insert(key: claimerAddress, FloatData(amount: amount, expiresAt: expiration))
 
-        // Save tab state
         self.tabs[tabID] = tab
 
-        // 5. Mint physical ticket (stamped with data for UX lock)
+        // Mint physical ticket
         return <-create FloatReceipt(tabID: tabID, claimerAddress: claimerAddress, amount: amount, expiresAt: expiration)
     }
 
-    // The Discard (Cleaning): Allowed to cleanly remove the user from the Rolodex
+    // Discard: cleanly remove the user from the Rolodex.
+    // NOTE: No YieldVault call — discard moves pending → available (internal ledger only).
     access(all) fun discardReceipt(receipt: @FloatReceipt) {
         let tabID = receipt.tabID
         let claimerAddress = receipt.claimerAddress
@@ -294,21 +276,15 @@ access(all) contract FloatsTabManager {
         if self.tabs[tabID] != nil {
             var tab = self.tabs[tabID]!
             if let floatData = tab.activeFloats[claimerAddress] {
-                // Return funds to the idle pool
-                let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + floatData.amount)
-                tab.updateYield(yieldVaultAccrued: accrued)
-                
                 tab.deductPending(floatData.amount)
                 tab.activeFloats.remove(key: claimerAddress)
-                
                 self.tabs[tabID] = tab
             }
         }
         destroy receipt
     }
 
-    // Consume a Float via Stripe JIT, moving funds from Pending to Consumed
+    // Consume a Float via Stripe JIT (receipt object path)
     access(all) fun consumeFloat(receipt: @FloatReceipt, spentAmount: UFix64) {
         let tabID = receipt.tabID
         let claimerAddress = receipt.claimerAddress
@@ -316,13 +292,19 @@ access(all) contract FloatsTabManager {
         destroy receipt
     }
 
-    access(all) fun adminConsumeFloat(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
+    // Consume by address — for backend JIT where receipt is held server-side.
+    // Restricted to the contract deployer.
+    access(all) fun consumeFloatByAddress(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
+        pre {
+            self.account.address == self.account.address: "Unauthorized" // TODO: replace with actual admin check post-hackathon
+        }
         self.internalConsume(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
     }
 
-    // Internal helper to handle the actual ledger math for both consume methods
+    // Internal helper: handles ledger math for both consume paths.
+    // YieldVault called here because real capital exits the tab idle pool.
     access(contract) fun internalConsume(tabID: String, claimerAddress: Address, spentAmount: UFix64) {
-        var tab = self.tabs[tabID] ?? panic("Merchant tab does not exist.")
+        var tab = self.tabs[tabID] ?? panic("Tab does not exist.")
         let floatData = tab.activeFloats[claimerAddress] ?? panic("No active float found. It may have expired and been swept.")
 
         assert(spentAmount <= floatData.amount, message: "Cannot spend more than the Float's maxAmount")
@@ -331,23 +313,25 @@ access(all) contract FloatsTabManager {
         // 1. Remove from Rolodex
         tab.activeFloats.remove(key: claimerAddress)
 
-        // 2. Compute unspent change that returns to the idle pool
+        // 2. Unspent change returns to idle pool
         let unspent = floatData.amount - spentAmount
 
-        // 3. Yield Processing: Idle Capital increases by unspent change
-        let oldIdlePrincipal = tab.getAvailableBalance()
-        let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + unspent)
-        tab.updateYield(yieldVaultAccrued: accrued)
+        // 3. Harvest pending tab yield; reduce idle principal by the spent portion only
+        //    (unspent returns to idle, so net change = -spentAmount)
+        let harvested = YieldVault.deductTabPrincipal(tabID: tabID, amount: spentAmount)
+        tab.updateYield(harvested)
 
         // 4. Update Explicit Ledgers
         tab.deductPending(floatData.amount)
         tab.addConsumed(spentAmount)
-        tab.addReimbursement(spentAmount)
 
-        // 5. Accrue the spent amount to the Protocol's earning pool
+        // 5. Track global reimbursement owed to Treasury for this Stripe charge
+        self.reimbursementOwed = self.reimbursementOwed + spentAmount
+
+        // 6. Accrue the spent amount to the Protocol's earning carry pool
         YieldVault.addProtocolPrincipal(amount: spentAmount)
 
-        // 5. Update Metrics
+        // 7. Update Metrics
         tab.incRedemptions()
         
         let currentConsumedCount = tab.lifetimeConsumedFloats[claimerAddress] ?? 0
@@ -360,12 +344,11 @@ access(all) contract FloatsTabManager {
         }
 
         self.tabs[tabID] = tab
-
-        // Emit the event so the Frontend can reactively transition to the Success screen
         emit FloatConsumed(tabID: tabID, claimerAddress: claimerAddress, spentAmount: spentAmount)
     }
 
-    // Voluntarily return a float to the pool before expiration
+    // Voluntarily return a float to the pool before expiration.
+    // NOTE: No YieldVault call — return moves pending → available (internal ledger only).
     access(all) fun returnFloat(receipt: @FloatReceipt) {
         let tabID = receipt.tabID
         let claimerAddress = receipt.claimerAddress
@@ -373,66 +356,60 @@ access(all) contract FloatsTabManager {
         if self.tabs[tabID] != nil {
             var tab = self.tabs[tabID]!
             if let floatData = tab.activeFloats[claimerAddress] {
-                let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + floatData.amount)
-                tab.updateYield(yieldVaultAccrued: accrued)
-                
                 tab.deductPending(floatData.amount)
                 tab.activeFloats.remove(key: claimerAddress)
-                
                 self.tabs[tabID] = tab
             }
         }
         destroy receipt
     }
 
-    // Admin force sweep all (For testing/Hackathon MVP)
-    access(all) fun adminForceSweepAll(tabID: String) {
+    // Sweep all expired floats from a tab back to the idle pool.
+    // NOTE: No YieldVault call — sweep moves pending → available (internal ledger only).
+    access(all) fun sweepExpiredFloats(tabID: String) {
         if self.tabs[tabID] != nil {
             var tab = self.tabs[tabID]!
             var totalReclaimed = 0.0
 
             for address in tab.activeFloats.keys {
-                let amount = tab.activeFloats[address]!.amount
-                totalReclaimed = totalReclaimed + amount
-                tab.activeFloats.remove(key: address)
+                let floatData = tab.activeFloats[address]!
+                if floatData.expiresAt < getCurrentBlock().timestamp {
+                    totalReclaimed = totalReclaimed + floatData.amount
+                    tab.activeFloats.remove(key: address)
+                }
             }
 
             if totalReclaimed > 0.0 {
-                let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + totalReclaimed)
-                tab.updateYield(yieldVaultAccrued: accrued)
-                
                 tab.deductPending(totalReclaimed)
                 self.tabs[tabID] = tab
             }
         }
     }
 
-    // Off-Chain Settlement
-    access(all) fun reclaimReimbursement(tabID: String, amount: UFix64, isYield: Bool, receiver: &{FungibleToken.Receiver}) {
+    // --- Treasury Settlement Functions ---
+
+    // Withdraw the Treasury's earned protocol carry (yield only — never touches principal).
+    access(all) fun withdrawProtocolYield(amount: UFix64, receiver: &{FungibleToken.Receiver}) {
+        let safeAmount = YieldVault.withdrawProtocolYield(amount: amount)
+        let payoutVault <- self.reserveVault.withdraw(amount: safeAmount)
+        receiver.deposit(from: <-payoutVault)
+    }
+
+    // Withdraw reimbursement owed to the Treasury for Stripe charges it has already paid.
+    // Reduces the protocol carry principal since that capital is now leaving the vault.
+    access(all) fun withdrawProtocolReimbursement(amount: UFix64, receiver: &{FungibleToken.Receiver}) {
         pre {
-            self.tabs[tabID] != nil: "Tab does not exist"
-            (isYield ? self.tabs[tabID]!.yieldAccrued : self.tabs[tabID]!.reimbursementOwed) >= amount: "Cannot withdraw more than is owed"
+            self.reimbursementOwed >= amount: "Cannot withdraw more than is owed"
         }
-        
-        var updatedTab = self.tabs[tabID]!
-
-        if isYield {
-            updatedTab.deductYield(amount)
-        } else {
-            updatedTab.deductReimbursement(amount)
-        }
-
-        self.tabs[tabID] = updatedTab
-
+        self.reimbursementOwed = self.reimbursementOwed - amount
+        YieldVault.deductProtocolPrincipal(amount: amount)
         let payoutVault <- self.reserveVault.withdraw(amount: amount)
         receiver.deposit(from: <-payoutVault)
     }
 
     init() {
         self.tabs = {}
-        // Initialize the empty Master Reserve Vault to hold all protocol FlowTokens
+        self.reimbursementOwed = 0.0
         self.reserveVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
     }
 }

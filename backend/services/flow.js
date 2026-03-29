@@ -117,10 +117,10 @@ const loadTransaction = (name) => {
 };
 
 // Pre-load transactions on startup
-const CADENCE_JIT_CONSUME = loadTransaction('jit_consume_float');
+const CADENCE_CONSUME     = loadTransaction('consume_float');
 const CADENCE_CLAIM       = loadTransaction('claim_float');
 const CADENCE_DISCARD     = loadTransaction('discard_float');
-const CADENCE_DEPOSIT     = loadTransaction('deposit_to_tab');
+const CADENCE_DEPOSIT     = loadTransaction('fund_tab');
 
 // NEW: Local script load helper for queries
 const loadScript = (name) => {
@@ -163,7 +163,7 @@ async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
 
     // Submit the transaction but don't wait for the SEAL here
     const txId = await fcl.mutate({
-        cadence: CADENCE_JIT_CONSUME,
+        cadence: CADENCE_CONSUME,
         args: (arg, t) => [arg(tabID, t.String), arg(formattedAmount, t.UFix64)],
         proposer: authorizationFunction,
         payer: authorizationFunction,

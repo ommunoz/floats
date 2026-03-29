@@ -1,116 +1,143 @@
 access(all) contract YieldVault {
 
-    // --- Tab Yield ---
-    // Keyed by tabID (not merchantID — a merchant can have many tabs)
+    // --- Structs ---
+    // Wrapped in structs so future fields can be added without a contract migration.
 
-    // Timestamp of the last harvest for each tab's principal
-    access(all) var tabDepositedAt: {String: UFix64}
+    access(all) struct TabYieldRecord {
+        access(all) var principal: UFix64
+        access(all) var lastHarvest: UFix64
 
-    // The active idle principal earning yield for each tab
-    access(all) var tabPrincipals: {String: UFix64}
+        init(principal: UFix64) {
+            self.principal = principal
+            self.lastHarvest = getCurrentBlock().timestamp
+        }
+    }
 
-    // --- Protocol Yield ---
-    // Global running accumulator for the protocol's "carry" (consumed but retained capital)
+    access(all) struct ProtocolYieldRecord {
+        access(all) var principal: UFix64
+        access(all) var lastHarvest: UFix64
+        access(all) var accruedYield: UFix64
 
-    // Total consumed principal currently in the vault earning protocol yield
-    access(all) var protocolPrincipal: UFix64
+        init() {
+            self.principal = 0.0
+            self.lastHarvest = getCurrentBlock().timestamp
+            self.accruedYield = 0.0
+        }
 
-    // Timestamp of the last time protocol yield was harvested into the accumulator
-    access(all) var protocolLastHarvest: UFix64
+        access(contract) fun addPrincipal(amount: UFix64, pending: UFix64) {
+            self.accruedYield = self.accruedYield + pending
+            self.lastHarvest = getCurrentBlock().timestamp
+            self.principal = self.principal + amount
+        }
 
-    // The accumulated protocol yield (safe to withdraw, never touches principal)
-    access(all) var protocolAccruedYield: UFix64
+        access(contract) fun deductPrincipal(amount: UFix64, pending: UFix64) {
+            self.accruedYield = self.accruedYield + pending
+            self.lastHarvest = getCurrentBlock().timestamp
+            let current = self.principal
+            self.principal = current > amount ? current - amount : 0.0
+        }
 
-    // --- Shared Config ---
+        access(contract) fun withdrawYield(amount: UFix64, pending: UFix64): UFix64 {
+            self.accruedYield = self.accruedYield + pending
+            self.lastHarvest = getCurrentBlock().timestamp
+            let safeAmount = amount < self.accruedYield ? amount : self.accruedYield
+            self.accruedYield = self.accruedYield - safeAmount
+            return safeAmount
+        }
+    }
 
-    // Mock APY multiplier to make yield visible in a demo
+    // --- State ---
+
+    // Per-tab idle principal tracking (keyed by tabID, not merchantID)
+    access(all) var tabYields: {String: TabYieldRecord}
+
+    // Global protocol carry (consumed capital still physically in the vault)
+    access(all) var protocolYield: ProtocolYieldRecord
+
+    // Mock APY multiplier — tunable live for demo purposes
     access(all) var ACCELERATOR_FACTOR: UFix64
 
-    // Admin function to tune the demo speed live if it's too fast/slow
+    // --- Admin ---
+
     access(all) fun setAccelerator(newFactor: UFix64) {
         self.ACCELERATOR_FACTOR = newFactor
     }
 
-    // -------------------------------------------
-    // TAB YIELD — per-tab idle principal tracking
-    // -------------------------------------------
+    // --- Internal helper ---
 
-    // Read-only: calculate pending tab yield since the last harvest
+    access(self) fun ratePerSecond(): UFix64 {
+        // Divide first to avoid UFix64 overflow on large principals
+        return self.ACCELERATOR_FACTOR / 31536000.0
+    }
+
+    // -----------------------------------------------
+    // TAB YIELD — per-tab idle principal
+    // Returns harvested yield so FloatsTabManager can credit the tab's yieldAccrued field.
+    // -----------------------------------------------
+
     access(all) fun calculateTabYield(tabID: String): UFix64 {
         let now = getCurrentBlock().timestamp
-        if let principal = self.tabPrincipals[tabID] {
-            if let lastTime = self.tabDepositedAt[tabID] {
-                if now > lastTime {
-                    let elapsedSeconds = now - lastTime
-                    // Divide FIRST to keep intermediate values small and avoid UFix64 overflow
-                    let ratePerSecond = self.ACCELERATOR_FACTOR / 31536000.0
-                    return principal * ratePerSecond * elapsedSeconds
-                }
+        if let record = self.tabYields[tabID] {
+            if now > record.lastHarvest {
+                let elapsed = now - record.lastHarvest
+                return record.principal * self.ratePerSecond() * elapsed
             }
         }
         return 0.0
     }
 
-    // Called whenever idle principal changes (deposit, claim, discard, sweep).
-    // Harvests pending tab yield into the return value, resets timer, sets new principal.
-    access(all) fun updatePrincipal(tabID: String, newPrincipal: UFix64): UFix64 {
-        let accruedYield = self.calculateTabYield(tabID: tabID)
-
-        self.tabPrincipals[tabID] = newPrincipal
-        self.tabDepositedAt[tabID] = getCurrentBlock().timestamp
-
-        return accruedYield
+    // Capital enters the idle pool (deposit). Returns harvested yield.
+    access(all) fun addTabPrincipal(tabID: String, amount: UFix64): UFix64 {
+        let harvested = self.calculateTabYield(tabID: tabID)
+        let current = self.tabYields[tabID]?.principal ?? 0.0
+        self.tabYields[tabID] = TabYieldRecord(principal: current + amount)
+        return harvested
     }
 
-    // -------------------------------------------
-    // PROTOCOL YIELD — global carry on consumed capital
-    // -------------------------------------------
+    // Capital leaves the idle pool (consume). Returns harvested yield.
+    access(all) fun deductTabPrincipal(tabID: String, amount: UFix64): UFix64 {
+        let harvested = self.calculateTabYield(tabID: tabID)
+        let current = self.tabYields[tabID]?.principal ?? 0.0
+        let newPrincipal = current > amount ? current - amount : 0.0
+        self.tabYields[tabID] = TabYieldRecord(principal: newPrincipal)
+        return harvested
+    }
 
-    // Read-only: calculate pending protocol yield since the last harvest
+    // -----------------------------------------------
+    // PROTOCOL YIELD — global carry on consumed capital
+    // -----------------------------------------------
+
     access(all) fun calculateProtocolYield(): UFix64 {
         let now = getCurrentBlock().timestamp
-        if now > self.protocolLastHarvest && self.protocolPrincipal > 0.0 {
-            let elapsedSeconds = now - self.protocolLastHarvest
-            let ratePerSecond = self.ACCELERATOR_FACTOR / 31536000.0
-            return self.protocolPrincipal * ratePerSecond * elapsedSeconds
+        let record = self.protocolYield
+        if now > record.lastHarvest && record.principal > 0.0 {
+            let elapsed = now - record.lastHarvest
+            return record.principal * self.ratePerSecond() * elapsed
         }
         return 0.0
     }
 
-    // Called when a float is consumed — adds to the protocol's earning principal.
-    // First harvests pending yield into the accumulator, then adds new principal.
+    // Called on float consume — spent amount starts earning protocol carry
     access(all) fun addProtocolPrincipal(amount: UFix64) {
-        // Harvest everything earned so far before changing the principal
         let pending = self.calculateProtocolYield()
-        self.protocolAccruedYield = self.protocolAccruedYield + pending
-        self.protocolLastHarvest = getCurrentBlock().timestamp
-
-        // Now add the newly consumed amount to the earning base
-        self.protocolPrincipal = self.protocolPrincipal + amount
+        self.protocolYield.addPrincipal(amount: amount, pending: pending)
     }
 
-    // Called when the Treasury redeems its carry.
-    // GUARD: can only withdraw from protocolAccruedYield, never from principal.
-    access(all) fun withdrawProtocolYield(amount: UFix64): UFix64 {
-        // First, harvest any pending yield into the accumulator
+    // Called on reimbursement withdrawal — capital leaves the carry pool
+    access(all) fun deductProtocolPrincipal(amount: UFix64) {
         let pending = self.calculateProtocolYield()
-        self.protocolAccruedYield = self.protocolAccruedYield + pending
-        self.protocolLastHarvest = getCurrentBlock().timestamp
+        self.protocolYield.deductPrincipal(amount: amount, pending: pending)
+    }
 
-        // Guard: cannot withdraw more than what has been earned
-        let safeAmount = amount < self.protocolAccruedYield ? amount : self.protocolAccruedYield
-        self.protocolAccruedYield = self.protocolAccruedYield - safeAmount
-        return safeAmount
+    // Treasury redeems its carry. GUARD: only `accruedYield` is withdrawable, never `principal`.
+    access(all) fun withdrawProtocolYield(amount: UFix64): UFix64 {
+        let pending = self.calculateProtocolYield()
+        return self.protocolYield.withdrawYield(amount: amount, pending: pending)
     }
 
     init() {
-        self.tabDepositedAt = {}
-        self.tabPrincipals = {}
-
-        self.protocolPrincipal = 0.0
-        self.protocolLastHarvest = getCurrentBlock().timestamp
-        self.protocolAccruedYield = 0.0
-
+        self.tabYields = {}
+        self.protocolYield = ProtocolYieldRecord()
         self.ACCELERATOR_FACTOR = 500.0
     }
 }

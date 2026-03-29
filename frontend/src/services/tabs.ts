@@ -21,7 +21,6 @@ export interface TabStruct {
   totalFunded: number
   totalConsumed: number
   pendingAmount: number
-  reimbursementOwed: number
   yieldAccrued: number
   activeFloats: Record<string, { amount: number; expiresAt: number }>
   funders: Record<string, FunderStats>
@@ -58,7 +57,6 @@ export async function fetchTab(tabId: string): Promise<{ struct: TabStruct, avai
     totalFunded: parseFloat(result.totalFunded),
     totalConsumed: parseFloat(result.totalConsumed),
     pendingAmount: parseFloat(result.pendingAmount),
-    reimbursementOwed: parseFloat(result.reimbursementOwed),
     yieldAccrued: parseFloat(result.yieldAccrued),
     activeFloats: {},
     funders: {},

@@ -7,22 +7,20 @@ access(all) struct TabData {
     access(all) let totalFunded: UFix64
     access(all) let totalConsumed: UFix64
     access(all) let pendingAmount: UFix64
-    access(all) let reimbursementOwed: UFix64
     access(all) let yieldAccrued: UFix64
-    access(all) let activeFloats: {Address: AnyStruct}
-    access(all) let funders: {Address: AnyStruct}
-    access(all) let history: [AnyStruct]
+    access(all) let activeFloats: &{Address: FloatsTabManager.FloatData}
+    access(all) let funders: &{Address: FloatsTabManager.FunderStats}
+    access(all) let history: &[FloatsTabManager.HistoryEvent]
     access(all) let redemptionCount: UInt64
     access(all) let isActive: Bool
 
-    init(tab: FloatsTabManager.Tab, liveYield: UFix64) {
+    init(tab: &FloatsTabManager.Tab, liveYield: UFix64) {
         self.id = tab.id
         self.merchantID = tab.merchantID
         self.totalFunded = tab.totalFunded
         self.totalConsumed = tab.totalConsumed
         self.pendingAmount = tab.pendingAmount
-        self.reimbursementOwed = tab.reimbursementOwed
-        // THE FIX: combine stored yield with live pending yield
+        // Combine stored yield with live pending yield for real-time display
         self.yieldAccrued = tab.yieldAccrued + liveYield
         self.activeFloats = tab.activeFloats
         self.funders = tab.funders
@@ -39,3 +37,4 @@ access(all) fun main(tabID: String): TabData? {
     }
     return nil
 }
+
