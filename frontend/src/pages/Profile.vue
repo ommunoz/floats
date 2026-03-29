@@ -24,7 +24,7 @@ const activeProfile = computed(() => {
   return {
     name: getDisplayName(auth.user.address),
     avatar: getAvatarUrl(auth.user.address),
-    memberSince: "Jan 2025", 
+    memberSince: "Mar 2026", 
     tabsBacked: stats.value.tabsBacked,
     floatsGrabbed: stats.value.floatsGrabbed
   }
