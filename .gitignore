@@ -1,5 +1,6 @@
 # flow
 emulator-account.pkey
+floats-admin.pkey
 imports
-.env
+**/.env
 node_modules

@@ -15,6 +15,7 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+.env
 .idea
 .DS_Store
 *.suo
@@ -22,7 +23,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# demo data
-src/data/demo_user.json
-src/data/names.json
