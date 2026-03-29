@@ -40,11 +40,24 @@
 				"type": "file",
 				"location": "emulator-account.pkey"
 			}
+		},
+		"floats-admin": {
+			"address": "407c9218dcdf3589",
+			"key": {
+				"type": "file",
+				"location": "floats-admin.pkey"
+			}
 		}
 	},
 	"deployments": {
 		"emulator": {
 			"emulator-account": [
+				"YieldVault",
+				"FloatsTabManager"
+			]
+		},
+		"testnet": {
+			"floats-admin": [
 				"YieldVault",
 				"FloatsTabManager"
 			]

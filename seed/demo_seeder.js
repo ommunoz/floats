@@ -15,19 +15,55 @@ if (!existsSync(outputsDir)) {
     mkdirSync(outputsDir, { recursive: true });
 }
 
-// --- Emulator Setup ---
-const SERVICE_ADDR = 'f8d6e0586b0a20c7';
-const SERVICE_KEY = (process.env.EMULATOR_PRIVATE_KEY || '').replace(/^0x/, '').trim();
+// --- Network Config ---
+const FLOW_NETWORK = process.env.FLOW_NETWORK || 'emulator';
+const IS_TESTNET = FLOW_NETWORK === 'testnet';
+
+const NETWORK_CONFIG = {
+    emulator: {
+        accessNode: 'http://127.0.0.1:8888',
+        serviceAddr: 'f8d6e0586b0a20c7',
+        serviceKey: (process.env.EMULATOR_PRIVATE_KEY || '').replace(/^0x/, '').trim(),
+        FloatsTabManager: 'f8d6e0586b0a20c7',
+        FungibleToken: 'ee82856bf20e2aa6',
+        FlowToken: '0ae53cb6e3f42a79',
+        botFundAmount: '1000.0',
+        cliNetwork: 'emulator',
+    },
+    testnet: {
+        accessNode: 'https://rest-testnet.onflow.org',
+        serviceAddr: '407c9218dcdf3589',
+        serviceKey: (() => {
+            const pkeyPath = path.join(projectRoot, 'floats-admin.pkey');
+            if (existsSync(pkeyPath)) return readFileSync(pkeyPath, 'utf8').trim().replace(/^0x/, '');
+            return (process.env.TESTNET_ADMIN_PRIVATE_KEY || '').replace(/^0x/, '').trim();
+        })(),
+        FloatsTabManager: '407c9218dcdf3589',
+        FungibleToken: '9a0766d93b6608b7',
+        FlowToken: '7e60df042a9c0868',
+        botFundAmount: '10.0',
+        cliNetwork: 'testnet',
+    },
+};
+
+const NET = NETWORK_CONFIG[FLOW_NETWORK];
+if (!NET) {
+    console.error(`❌ Unknown FLOW_NETWORK: "${FLOW_NETWORK}". Use "emulator" or "testnet".`);
+    process.exit(1);
+}
+
+const SERVICE_ADDR = NET.serviceAddr;
+const SERVICE_KEY = NET.serviceKey;
 
 const ALIASES = {
-    "FloatsTabManager": fcl.withPrefix(SERVICE_ADDR),
-    "FungibleToken": "0xee82856bf20e2aa6",
-    "FlowToken": "0x0ae53cb6e3f42a79"
+    "FloatsTabManager": fcl.withPrefix(NET.FloatsTabManager),
+    "FungibleToken": fcl.withPrefix(NET.FungibleToken),
+    "FlowToken": fcl.withPrefix(NET.FlowToken),
 };
 
 fcl.config({
-  "accessNode.api": 'http://127.0.0.1:8888',
-  "flow.network": 'emulator'
+    "accessNode.api": NET.accessNode,
+    "flow.network": FLOW_NETWORK,
 });
 
 const getCadence = (filename) => {
@@ -46,17 +82,6 @@ const tabs = JSON.parse(rawTabsData);
 const usersInputPath = path.join(__dirname, 'inputs', 'users.json');
 const actorsMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8')).filter(u => !u.isDemoUser);
 const demoUsersMeta = JSON.parse(readFileSync(usersInputPath, 'utf-8')).filter(u => u.isDemoUser);
-
-// --- Helpers ---
-
-
-
-
-
-
-
-
-
 
 // --- FCL Signing Helpers ---
 const hashMsgHex = (msgHex) => {
@@ -96,15 +121,17 @@ const serviceAuth = authz(SERVICE_ADDR, SERVICE_KEY);
 async function seed() {
     console.log(`\n🌊 Floats Demo Seeding Engine`);
     console.log(`------------------------------`);
+    console.log(`🌐 Network: ${FLOW_NETWORK.toUpperCase()}`);
+    console.log(`🏛️  Service Account: 0x${SERVICE_ADDR}\n`);
 
-    // 1. Programmatically initialize Bot Actors
-    console.log(`Step 1: Synchronizing & Funding Bot Actors...`);
-    const bots = []; // These stay in-memory only
-    const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false, gender: "other" } };
-    
+    if (IS_TESTNET && !SERVICE_KEY) {
+        console.error('❌ TESTNET_ADMIN_PRIVATE_KEY is not set in backend/.env');
+        process.exit(1);
+    }
+
     const fundTx = `
-    import FungibleToken from 0xee82856bf20e2aa6
-    import FlowToken from 0x0ae53cb6e3f42a79
+    import FungibleToken from ${fcl.withPrefix(NET.FungibleToken)}
+    import FlowToken from ${fcl.withPrefix(NET.FlowToken)}
     transaction(recipient: Address, amount: UFix64) {
         prepare(signer: auth(BorrowValue, FungibleToken.Withdraw) &Account) {
             let vault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(from: /storage/flowTokenVault)!
@@ -113,22 +140,30 @@ async function seed() {
         }
     }`;
 
+    // 1. Programmatically initialize Bot Actors
+    console.log(`Step 1: Synchronizing & Funding Bot Actors...`);
+    const bots = [];
+    const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false, gender: "other" } };
+
     for (const meta of actorsMeta) {
         process.stdout.write(`  🌱 Preparing Bot ${meta.name}... `);
-        
+
         const keyPair = ec.genKeyPair();
         const priv = keyPair.getPrivate('hex');
         const pub = keyPair.getPublic('hex').slice(2);
-        
+
         try {
-            const output = execSync(`flow accounts create --key ${pub} --network emulator`, { encoding: 'utf8', stdio: 'pipe' });
+            const output = execSync(
+                `flow accounts create --key ${pub} --network ${NET.cliNetwork} --signer floats-admin`,
+                { encoding: 'utf8', stdio: 'pipe', cwd: projectRoot }
+            );
             const addrMatch = output.match(/0x[a-fA-F0-9]+/);
             if (!addrMatch) throw new Error("Could not parse address from CLI output");
             const addr = fcl.withPrefix(addrMatch[0]);
 
             const txId = await fcl.mutate({
                 cadence: fundTx,
-                args: (arg, t) => [arg(addr, t.Address), arg("1000.0", t.UFix64)],
+                args: (arg, t) => [arg(addr, t.Address), arg(NET.botFundAmount, t.UFix64)],
                 proposer: serviceAuth,
                 payer: serviceAuth,
                 authorizations: [serviceAuth],
@@ -138,7 +173,7 @@ async function seed() {
 
             bots.push({ ...meta, addr, key: priv });
             usersMap[addr] = { name: meta.name, isDemoUser: false, gender: meta.gender, avatarUrl: meta.avatarUrl };
-            console.log(`✅ [${addr}] ($1000 Loaded)`);
+            console.log(`✅ [${addr}] ($${NET.botFundAmount} Loaded)`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
         }
@@ -147,26 +182,28 @@ async function seed() {
     // 1b. Initialize Demo User
     console.log(`\nStep 1b: Synchronizing Demo User...`);
     const demoUserActors = [];
-    const demoAdminKeys = {}; // These WILL be exported
+    const demoAdminKeys = {};
     const demoManagedCards = {};
 
     for (const meta of demoUsersMeta) {
         process.stdout.write(`  🌟 Preparing Demo User ${meta.name}... `);
-        
+
         const keyPair = ec.genKeyPair();
         const priv = keyPair.getPrivate('hex');
         const pub = keyPair.getPublic('hex').slice(2);
-        
+
         try {
-            const output = execSync(`flow accounts create --key ${pub} --network emulator`, { encoding: 'utf8', stdio: 'pipe' });
+            const output = execSync(
+                `flow accounts create --key ${pub} --network ${NET.cliNetwork} --signer floats-admin`,
+                { encoding: 'utf8', stdio: 'pipe', cwd: projectRoot }
+            );
             const addrMatch = output.match(/0x[a-fA-F0-9]+/);
             if (!addrMatch) throw new Error("Could not parse address from CLI output");
             const addr = fcl.withPrefix(addrMatch[0]);
 
-            // Fund demo user
             const txId = await fcl.mutate({
                 cadence: fundTx,
-                args: (arg, t) => [arg(addr, t.Address), arg("1000.0", t.UFix64)],
+                args: (arg, t) => [arg(addr, t.Address), arg(NET.botFundAmount, t.UFix64)],
                 proposer: serviceAuth,
                 payer: serviceAuth,
                 authorizations: [serviceAuth],
@@ -174,35 +211,33 @@ async function seed() {
             });
             await fcl.tx(txId).onceSealed();
 
-            // Issue Stripe Virtual Card for Demo User
             console.log(`\n  💳 Issuing Stripe Card for ${meta.name}...`);
             const cardholder = await stripe.issuing.cardholders.create({
-              name: meta.name,
-              email: `${meta.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-              phone_number: '+18880000000',
-              status: 'active',
-              type: 'individual',
-              billing: { address: { line1: '123 Test St', city: 'SF', state: 'CA', postal_code: '94111', country: 'US' } },
+                name: meta.name,
+                email: `${meta.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+                phone_number: '+18880000000',
+                status: 'active',
+                type: 'individual',
+                billing: { address: { line1: '123 Test St', city: 'SF', state: 'CA', postal_code: '94111', country: 'US' } },
             });
 
             const card = await stripe.issuing.cards.create({
-              cardholder: cardholder.id,
-              type: 'virtual',
-              currency: 'usd',
-              metadata: { flowAddress: addr }
+                cardholder: cardholder.id,
+                type: 'virtual',
+                currency: 'usd',
+                metadata: { flowAddress: addr }
             });
 
             demoUserActors.push({ ...meta, addr, key: priv, stripeCardId: card.id });
             usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id, gender: meta.gender, avatarUrl: meta.avatarUrl };
             demoAdminKeys[addr] = priv;
             demoManagedCards[addr] = card.id;
-            console.log(`  ✅ Demo [${addr}] ($1000 Loaded + Card Issued: ${card.id})`);
+            console.log(`  ✅ Demo [${addr}] ($${NET.botFundAmount} Loaded + Card Issued: ${card.id})`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
         }
     }
 
-    // Export internal debug data to /seed/outputs/
     writeFileSync(path.join(outputsDir, 'users.json'), JSON.stringify(usersMap, null, 2));
 
     // 2. Initialize Merchant Tabs
@@ -234,15 +269,14 @@ async function seed() {
     const consumeTx = getCadence('transactions/consume_float.cdc');
 
     for (const tab of tabs) {
-        // Exctract seed logic explicitly from the separate object
         if (!tab.seedData) continue;
         const toClaim = tab.seedData.grabsToSimulate || 0;
         const currentAvail = tab.seedData.fundsToSimulate || 0;
-        
+
         if (toClaim === 0 && currentAvail === 0) continue;
 
         console.log(`  👉 Activity for ${tab.merchantName}:`);
-        
+
         let actions = [];
         const totalNeeded = toClaim + currentAvail;
         let fundedSoFar = 0;
@@ -250,7 +284,6 @@ async function seed() {
         while (fundedSoFar < totalNeeded) {
             const remaining = totalNeeded - fundedSoFar;
             const chunkSize = Math.min(remaining, Math.floor(Math.random() * 4) + 1);
-            
             actions.push({ type: 'fund', count: chunkSize });
             fundedSoFar += chunkSize;
 
@@ -276,7 +309,7 @@ async function seed() {
                     const txId = await fcl.mutate({
                         cadence: depositTx,
                         args: (arg, t) => [
-                            arg(tab.id, t.String), 
+                            arg(tab.id, t.String),
                             arg(actor.addr, t.Address),
                             arg(amount, t.UFix64)
                         ],
@@ -290,7 +323,7 @@ async function seed() {
                 } else {
                     process.stdout.write(`    🏷️  ${actor.name} claiming $${parseFloat(value).toFixed(0)}... `);
                     const actorAuth = authz(actor.addr, actor.key);
-                    
+
                     const claimTxId = await fcl.mutate({
                         cadence: claimTx,
                         args: (arg, t) => [arg(tab.id, t.String), arg(value, t.UFix64)],
@@ -325,7 +358,6 @@ async function seed() {
         mkdirSync(frontendDataDir, { recursive: true });
     }
 
-    // Copy merchant logos to frontend public dir so they're statically served
     const frontendPublicLogosDir = path.join(projectRoot, 'frontend', 'public', 'merchant-logos');
     if (existsSync(logosInputDir)) {
         mkdirSync(frontendPublicLogosDir, { recursive: true });
@@ -336,8 +368,6 @@ async function seed() {
         console.log(`  ⚠️  No merchant-logos folder found, skipping logo copy`);
     }
 
-    // Sanitize the inputs to ensure the Frontend respects our architecture (removing seedData entirely)
-    // Also derive merchantLogo from the tab ID — fallback to DiceBear if no local file exists
     const sanitizedTabs = tabs.map(t => {
         const copy = { ...t };
         delete copy.seedData;
@@ -350,7 +380,7 @@ async function seed() {
 
     writeFileSync(path.join(frontendDataDir, 'tabs.json'), JSON.stringify(sanitizedTabs, null, 2));
     writeFileSync(path.join(frontendDataDir, 'users.json'), JSON.stringify(usersMap, null, 2));
-    
+
     console.log(`  📦 Exported sanitized tabs.json to frontend`);
     console.log(`  📦 Exported consolidated users.json to frontend`);
 
@@ -360,7 +390,7 @@ async function seed() {
     if (!existsSync(backendDataDir)) {
         mkdirSync(backendDataDir, { recursive: true });
     }
-    
+
     writeFileSync(path.join(outputsDir, 'managed_keys.json'), JSON.stringify(demoAdminKeys, null, 2));
     writeFileSync(path.join(outputsDir, 'managed_cards.json'), JSON.stringify(demoManagedCards, null, 2));
 
