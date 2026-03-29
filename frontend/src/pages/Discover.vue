@@ -20,7 +20,6 @@ const auth = useAuthStore()
         <!-- Left: Wordmark -->
         <div class="wordmark-container">
           <RouterLink to="/" class="wordmark-link">
-            <span class="logo-mark">f</span>
             floats
           </RouterLink>
         </div>
@@ -132,19 +131,6 @@ const auth = useAuthStore()
   align-items: center;
   gap: 0.625rem;
   text-decoration: none;
-}
-
-.logo-mark {
-  width: 2rem; /* Increased from 1.5rem */
-  height: 2rem;
-  border-radius: 9999px;
-  background-color: var(--floats-teal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white; /* white */
-  font-size: 1rem; /* Increased from 0.75rem */
-  font-weight: bold;
 }
 
 .nav-pill-group {
