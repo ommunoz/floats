@@ -70,20 +70,31 @@ router.post('/simulate-tap', async (req, res) => {
 
         const centsAmount = amount ? Math.round(amount * 100) : 500; // default $5.00
 
-        // 1. Check if we already have a pre-issued card for this user (data/managed_cards.json)
-        const managedCardsPath = path.join(__dirname, '..', 'data', 'managed_cards.json');
+        // 1. Check if we already have a pre-issued card for this user
         let cardId = null;
 
-        if (fs.existsSync(managedCardsPath)) {
-            const managedCards = JSON.parse(fs.readFileSync(managedCardsPath, 'utf8'));
-            // Normalize address search (try with and without 0x)
-            const addr = flowAddress.startsWith('0x') ? flowAddress : `0x${flowAddress}`;
-            const altAddr = flowAddress.replace(/^0x/, '');
-            cardId = managedCards[addr] || managedCards[altAddr];
-            
-            if (cardId) {
-                console.log(`   ✅ Found pre-issued Card ID: ${cardId} for user ${addr}`);
+        const getManagedCards = () => {
+            if (process.env.MANAGED_CARDS) {
+                try {
+                    return JSON.parse(process.env.MANAGED_CARDS);
+                } catch (e) {
+                    console.error("❌ Failed to parse MANAGED_CARDS env var:", e);
+                }
             }
+            const managedCardsPath = path.join(__dirname, '..', 'data', 'managed_cards.json');
+            if (fs.existsSync(managedCardsPath)) {
+                return JSON.parse(fs.readFileSync(managedCardsPath, 'utf8'));
+            }
+            return {};
+        };
+
+        const managedCards = getManagedCards();
+        const addr = flowAddress.startsWith('0x') ? flowAddress : `0x${flowAddress}`;
+        const altAddr = flowAddress.replace(/^0x/, '');
+        cardId = managedCards[addr] || managedCards[altAddr];
+        
+        if (cardId) {
+            console.log(`   ✅ Found pre-issued Card ID: ${cardId} for user ${addr}`);
         }
 
         // 2. If no card found, fallback to on-demand creation (legacy behavior)

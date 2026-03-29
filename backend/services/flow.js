@@ -119,38 +119,85 @@ const CADENCE_CLAIM       = loadTransaction('claim_float');
 const CADENCE_DISCARD     = loadTransaction('discard_float');
 const CADENCE_DEPOSIT     = loadTransaction('deposit_to_tab');
 
-const getManagedKey = (address) => {
+// NEW: Local script load helper for queries
+const loadScript = (name) => {
+    const filePath = path.join(__dirname, '..', 'flow', 'scripts', `${name}.cdc`);
+    return fs.readFileSync(filePath, 'utf8')
+        .replace(/0xFLOATS_TAB_MANAGER/g, CONTRACT_ADDRESS);
+};
+
+const SCRIPT_GET_ACTIVE_FLOAT = loadScript('get_active_float');
+
+async function checkFloatIsValid(claimerAddress) {
+    try {
+        const result = await fcl.query({
+            cadence: SCRIPT_GET_ACTIVE_FLOAT,
+            args: (arg, t) => [arg(claimerAddress, t.Address)]
+        });
+        return !!result;
+    } catch (e) {
+        console.error("❌ FCL Query failed for checkFloatIsValid:", e);
+        return false;
+    }
+}
+
+const getManagedKeys = () => {
+    // 1. Try Environment Variable (Railway priority)
+    if (process.env.MANAGED_KEYS) {
+        try {
+            return JSON.parse(process.env.MANAGED_KEYS);
+        } catch (e) {
+            console.error("❌ Failed to parse MANAGED_KEYS env var:", e);
+        }
+    }
+
+    // 2. Fallback to Local Filesystem
     const keysPath = path.join(__dirname, '..', 'data', 'managed_keys.json');
-    if (!fs.existsSync(keysPath)) return null;
-    const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
-    const normalized = address.startsWith('0x') ? address : `0x${address}`;
-    return keys[normalized] || keys[address] || null;
+    if (fs.existsSync(keysPath)) {
+        try {
+            return JSON.parse(fs.readFileSync(keysPath, 'utf8'));
+        } catch (e) {
+            console.error("❌ Failed to parse managed_keys.json file:", e);
+        }
+    }
+
+    return {};
 };
 
 async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
     const formattedAmount = spentAmount.toFixed(8);
-    console.log(`Executing JIT Consume for ${claimerAddress} at tab ${tabID} ($${formattedAmount})...`);
+    const managedKeys = getManagedKeys();
+    const normalized = claimerAddress.startsWith('0x') ? claimerAddress : `0x${claimerAddress}`;
+    const userKey = managedKeys[normalized] || managedKeys[claimerAddress] || null;
 
-    const userKey = getManagedKey(claimerAddress);
-    if (!userKey) {
-        throw new Error(`No managed key found for address: ${claimerAddress}. Cannot sign JIT consume.`);
-    }
+    if (!userKey) throw new Error(`No managed key found for address: ${claimerAddress}`);
 
-    const userAuth = createAuthFunction(claimerAddress, userKey);
-
-    const transactionId = await fcl.mutate({
+    // Submit the transaction but don't wait for the SEAL here
+    const txId = await fcl.mutate({
         cadence: CADENCE_JIT_CONSUME,
         args: (arg, t) => [arg(tabID, t.String), arg(formattedAmount, t.UFix64)],
-        proposer: userAuth,
-        payer: authorizationFunction,
-        authorizations: [userAuth],
-        limit: 999
+        proposer: fcl.authz,
+        payer: fcl.authz,
+        authorizations: [
+            fcl.authz,
+            signer(normalized, userKey)
+        ],
+        limit: 9999
     });
 
-    console.log(`FCL Mutate returned txId: ${transactionId}`);
-    await fcl.tx(transactionId).onceSealed();
-    console.log(`JIT Consume sealed!`);
-    return transactionId;
+    console.log(`🌀 JIT Transaction Submitted: ${txId}. Approving Stripe now, sealing in background...`);
+
+    // 🔥 Background Seal Watcher
+    (async () => {
+        try {
+            await fcl.tx(txId).onceSealed();
+            console.log(`✅ JIT Transaction Sealed: ${txId}`);
+        } catch (e) {
+            console.error(`❌ BACKGROUND SEAL FAILED for ${txId}:`, e.message);
+        }
+    })();
+
+    return txId;
 }
 
 async function claimFloat(tabID, amount, claimerAddress, claimerPrivateKey) {

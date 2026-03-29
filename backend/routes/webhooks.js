@@ -50,25 +50,28 @@ router.post('/stripe', async (req, res) => {
         try {
             console.log(`Stripe Issuing Request: ${patronFlowAddress} tapped card for $${fiatAmount} at ${merchantID}`);
             
-            // 4. Trigger the Flow Blockchain JIT Consumption
-            // If the user doesn't have an active receipt, this Cadence transaction will FAIL
+            // 4. ✨ FAST CHECK: Verify the user actually has a valid float via fcl.query (~300ms)
+            const { checkFloatIsValid } = require('../services/flow');
+            const isValid = await checkFloatIsValid(patronFlowAddress);
+
+            if (!isValid) {
+                console.warn(`Decline: No valid unexpired float found for ${patronFlowAddress}`);
+                rejectPendingTap(patronFlowAddress, new Error("No active float found. Tap declined by Floats Treasury."));
+                return res.json({ approved: false });
+            }
+
+            // 5. 🔥 ASYNC CONSUME: Submit the consume transaction and return txId immediately (~300ms)
             const txId = await consumeFloatJIT(merchantID, patronFlowAddress, fiatAmount);
             
-            console.log(`Flow JIT Success! Transaction ID: ${txId}`);
-
-            // Notify any waiting simulate-tap request with the sealed txId
+            // Notify any waiting simulate-tap request with the submitted txId
             resolvePendingTap(patronFlowAddress, txId);
             
-            // Reply to Stripe: Approved!
+            // Reply to Stripe: Approved! (Total latency: ~600-800ms)
             return res.json({ approved: true });
 
         } catch (error) {
-            console.error(`Flow JIT Failed (Likely no receipt or expired): ${error.message}`);
-            
-            // Reject the pending tap instantly so the frontend knows the tap failed
+            console.error(`Flow JIT Pipeline Error: ${error.message}`);
             rejectPendingTap(patronFlowAddress, error);
-            
-            // Reply to Stripe: Declined! Insufficient Float Balance
             return res.json({ approved: false });
         }
     }
