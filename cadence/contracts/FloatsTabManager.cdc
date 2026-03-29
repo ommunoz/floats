@@ -6,6 +6,7 @@ access(all) contract FloatsTabManager {
     
     // --- Events ---
     access(all) event FloatConsumed(tabID: String, claimerAddress: Address, spentAmount: UFix64)
+    access(all) event TabFunded(tabID: String, funderAddress: Address, amount: UFix64)
 
     // --- The Master Dictionary ---
     // Single cohesive state grouping for all active tabs
@@ -202,6 +203,9 @@ access(all) contract FloatsTabManager {
 
         // Save tab back
         self.tabs[tabID] = tab
+
+        // Emit funding event for real-time dashboard sync
+        emit TabFunded(tabID: tabID, funderAddress: funderAddress, amount: amount)
     }
 
     // Toggle Tab Active Status

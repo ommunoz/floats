@@ -22,6 +22,11 @@ const router = createRouter({
       component: Tab
     },
     {
+      path: '/merchant/:id?',
+      name: 'merchant',
+      component: () => import('../pages/Merchant.vue')
+    },
+    {
       path: '/card',
       name: 'card',
       component: () => import('../pages/Card.vue')
