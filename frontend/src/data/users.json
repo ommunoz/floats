@@ -30,10 +30,9 @@
     "gender": "female"
   },
   "0xf669cb8d41ce0c74": {
-    "name": "Omar Muñoz",
+    "name": "Demo User",
     "isDemoUser": true,
     "stripeCardId": "ic_1TG9r6HprA4pRoyud5UlIixH",
-    "gender": "male",
-    "avatarUrl": "https://api.dicebear.com/9.x/avataaars/svg?seed=Omar%20Mu%C3%B1oz&mouth=smile&hairColor=000000&top=shortFlat&backgroundColor=e9f9e5&accesories=prescription01&clothing=hoodie"
+    "gender": "other"
   }
 }
