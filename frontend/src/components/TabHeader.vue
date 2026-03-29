@@ -2,6 +2,7 @@
 import { ArrowLeft, MapPin } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import TabStatusPill from './TabStatusPill.vue'
+import MerchantLogo from './MerchantLogo.vue'
 import type { Tab } from '../stores/tabs'
 
 defineProps<{
@@ -31,9 +32,7 @@ const router = useRouter()
 
     <div class="merchant-header-bar">
       <div class="merchant-header-content">
-        <div class="logo-wrapper">
-          <img :src="tab.merchantLogo" alt="" class="merchant-logo" />
-        </div>
+        <MerchantLogo :src="tab.merchantLogo" :alt="tab.merchantName" size="lg" class="header-logo" />
         
         <div class="merchant-info-column">
           <div class="merchant-title-row">
@@ -106,24 +105,11 @@ const router = useRouter()
   position: relative;
 }
 
-.logo-wrapper {
-  margin-top: -2.25rem; 
+.header-logo {
+  margin-top: -2.25rem;
   margin-bottom: 0.75rem;
-  width: 4.5rem; 
-  height: 4.5rem; 
-  border-radius: 50%;
-  background: white;
-  padding: 0.25rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   position: relative;
   z-index: 10;
-
-  .merchant-logo {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-  }
 }
 
 .merchant-info-column {

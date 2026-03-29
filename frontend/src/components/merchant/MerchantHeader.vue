@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Share2, Check, Settings } from 'lucide-vue-next'
+import MerchantLogo from '../MerchantLogo.vue'
 
 const props = defineProps<{
   merchantName: string
@@ -31,7 +32,7 @@ const handleShare = async () => {
   <header class="dashboard-header">
     <div class="header-container">
       <div class="merchant-identity">
-        <img :src="merchantLogo" :alt="merchantName" class="merchant-logo" />
+        <MerchantLogo :src="merchantLogo" :alt="merchantName" size="sm" />
         <div class="merchant-titles">
           <div class="title-row">
             <h1 class="merchant-name">{{ merchantName }}</h1>
@@ -82,13 +83,6 @@ const handleShare = async () => {
   align-items: center;
   gap: 1rem;
 
-  .merchant-logo {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 0.5rem;
-    background: var(--muted);
-    object-fit: cover;
-  }
 
   .merchant-titles {
     display: flex;

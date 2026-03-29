@@ -5,9 +5,7 @@
     </div>
 
     <div class="card-body">
-      <div class="logo-wrapper">
-        <img :src="tab.merchantLogo" alt="" class="merchant-logo" />
-      </div>
+      <MerchantLogo :src="tab.merchantLogo" :alt="tab.merchantName" size="md" class="card-logo" />
 
       <div class="merchant-header-row">
         <h3 class="merchant-name">{{ tab.merchantName }}</h3>
@@ -32,6 +30,7 @@
 import { computed } from 'vue'
 import AvatarStack from './AvatarStack.vue'
 import TabStatusPill from './TabStatusPill.vue'
+import MerchantLogo from './MerchantLogo.vue'
 import { MapPin } from 'lucide-vue-next'
 import type { Tab } from '../stores/tabs'
 import { useTabsStore } from '../stores/tabs'
@@ -89,22 +88,9 @@ const dynamicUrls = computed(() => {
   position: relative;
 }
 
-.logo-wrapper {
+.card-logo {
   margin-top: -2rem;
   margin-bottom: 0.75rem;
-  width: 4rem;
-  height: 4rem;
-  border-radius: 50%;
-  background: white;
-  padding: 0.25rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-}
-
-.merchant-logo {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
 }
 
 .merchant-header-row {

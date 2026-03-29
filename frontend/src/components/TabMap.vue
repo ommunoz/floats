@@ -339,8 +339,9 @@ onUnmounted(() => {
       height: 3.5rem;
       border-radius: 50%;
       background: white;
-      padding: 0.2rem;
+      border: 3px solid white;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      overflow: hidden;
       z-index: 20;
 
       .popup-logo {
@@ -348,6 +349,7 @@ onUnmounted(() => {
         height: 100%;
         border-radius: 50%;
         object-fit: cover;
+        transform: scale(1.3);
       }
     }
 

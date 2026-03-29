@@ -2,7 +2,7 @@ const fcl = require('@onflow/fcl');
 const { SHA3 } = require('sha3');
 const EC = require('elliptic').ec;
 const { execSync } = require('child_process');
-const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
+const { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync, readdirSync } = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -10,6 +10,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const ec = new EC('p256');
 const projectRoot = path.resolve(__dirname, '..');
 const outputsDir = path.join(__dirname, 'outputs');
+const logosInputDir = path.join(__dirname, 'inputs', 'merchant-logos');
 if (!existsSync(outputsDir)) {
     mkdirSync(outputsDir, { recursive: true });
 }
@@ -324,10 +325,26 @@ async function seed() {
         mkdirSync(frontendDataDir, { recursive: true });
     }
 
+    // Copy merchant logos to frontend public dir so they're statically served
+    const frontendPublicLogosDir = path.join(projectRoot, 'frontend', 'public', 'merchant-logos');
+    if (existsSync(logosInputDir)) {
+        mkdirSync(frontendPublicLogosDir, { recursive: true });
+        cpSync(logosInputDir, frontendPublicLogosDir, { recursive: true });
+        const copied = readdirSync(frontendPublicLogosDir);
+        console.log(`  🖼️  Copied ${copied.length} merchant logo(s) to frontend/public/merchant-logos/`);
+    } else {
+        console.log(`  ⚠️  No merchant-logos folder found, skipping logo copy`);
+    }
+
     // Sanitize the inputs to ensure the Frontend respects our architecture (removing seedData entirely)
+    // Also derive merchantLogo from the tab ID — fallback to DiceBear if no local file exists
     const sanitizedTabs = tabs.map(t => {
         const copy = { ...t };
         delete copy.seedData;
+        const logoFile = path.join(logosInputDir, `${t.id}.png`);
+        copy.merchantLogo = existsSync(logoFile)
+            ? `/merchant-logos/${t.id}.png`
+            : `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(t.id)}`;
         return copy;
     });
 
