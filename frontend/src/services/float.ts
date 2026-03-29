@@ -1,5 +1,6 @@
 import * as fcl from '@onflow/fcl'
 import getActiveFloatScript from '../flow/scripts/get_active_float.cdc?raw'
+import * as api from './api'
 
 // Shared with tabs.ts for the activeFloats registry shape — kept minimal
 export interface FloatReceipt {
@@ -7,7 +8,8 @@ export interface FloatReceipt {
   expiresAt: number
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
+// Re-export result types so callers don't need to import api.ts directly
+export type { ClaimFloatResult as ClaimResult, DiscardFloatResult as DiscardResult } from './api'
 
 // ---------------------------------------------------------------------------
 // Chain reads — user account scope
@@ -31,58 +33,27 @@ export async function fetchFloatReceipt(claimerAddress: string): Promise<FloatRe
     expiresAt: parseFloat(result.expiresAt),
   }
 }
+
 // ---------------------------------------------------------------------------
 // Backend API calls — float lifecycle actions
 // ---------------------------------------------------------------------------
-
-export interface ClaimResult {
-  txId: string
-}
-
-export interface DiscardResult {
-  txId: string
-}
 
 /**
  * Submits a claim transaction via the backend managed-key proxy.
  * The backend signs on behalf of the claimer and returns the sealed txId.
  */
-export async function claimFloat(
+export function claimFloat(
   tabId: string,
   claimerAddress: string,
   amount: number
-): Promise<ClaimResult> {
-  const response = await fetch(`${BACKEND_URL}/api/claim`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tabId, claimerAddress, amount }),
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(errorData.error || 'Failed to claim float')
-  }
-
-  return response.json()
+) {
+  return api.claimFloat({ tabId, claimerAddress, amount })
 }
 
 /**
  * Submits a discard transaction via the backend managed-key proxy,
  * returning the float's locked funds back to the tab's idle pool.
  */
-export async function discardFloat(
-  tabId: string,
-  claimerAddress: string
-): Promise<DiscardResult> {
-  const response = await fetch(`${BACKEND_URL}/api/discard`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tabId, claimerAddress }),
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to discard float on-chain')
-  }
-
-  return response.json()
+export function discardFloat(tabId: string, claimerAddress: string) {
+  return api.discardFloat({ tabId, claimerAddress })
 }

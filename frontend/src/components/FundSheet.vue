@@ -4,6 +4,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import * as fcl from '@onflow/fcl'
 import { useAuthStore } from '../stores/auth'
 import type { Tab } from '../stores/tabs'
+import * as api from '../services/api'
 
 // Subcomponents
 import FundAmountStep from './fund/FundAmountStep.vue'
@@ -62,55 +63,28 @@ const handleFund = async () => {
   errorMessage.value = ''
 
   try {
-    const response = await fetch('http://localhost:3001/api/create-payment-intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: numericAmount.value * 100,
-        merchantID: props.tab.id,
-        flowAddress: authStore.user?.address
-      })
+    const { clientSecret } = await api.createPaymentIntent({
+      amount: numericAmount.value * 100,
+      merchantID: props.tab.id,
+      flowAddress: authStore.user?.address || '0x0000000000000000',
     })
-
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error || 'Failed to create payment')
 
     const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
     if (!stripe) throw new Error('Stripe failed to load')
 
-    const { paymentIntent, error } = await stripe.confirmCardPayment(data.clientSecret, {
+    const { paymentIntent, error } = await stripe.confirmCardPayment(clientSecret, {
       payment_method: {
         card: { token: 'tok_visa' },
-        billing_details: { name: authStore.user?.name || 'Demo User' }
-      }
+        billing_details: { name: authStore.user?.name || 'Guest Funder' },
+      },
     })
 
     if (error) throw new Error(error.message)
 
-    // Wait for the backend webhook to process the flow deposit
-    const waitRes = await fetch('http://localhost:3001/api/wait-for-deposit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentIntentId: paymentIntent.id })
-    })
-    
-    if (!waitRes.ok) {
-      const errData = await waitRes.json().catch(() => ({}))
-      throw new Error(errData.error || 'Blockchain deposit failed')
-    }
+    const { txId } = await api.waitForDeposit({ paymentIntentId: paymentIntent.id })
 
-    const { txId } = await waitRes.json()
-
-    // Wait for transaction to seal on-chain
-    await new Promise<void>((resolve, reject) => {
-      fcl.tx(txId).subscribe((tx: any) => {
-        if (fcl.tx.isSealed(tx)) {
-          resolve()
-        } else if (tx.errorMessage) {
-          reject(new Error(tx.errorMessage))
-        }
-      })
-    })
+    console.log('Payment captured! Waiting for Flow seal:', txId)
+    await fcl.tx(txId).onceSealed()
 
     step.value = 'success'
     emit('funded', numericAmount.value)

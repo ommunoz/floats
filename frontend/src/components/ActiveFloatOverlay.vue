@@ -8,6 +8,7 @@ import FloatConsumed from './float/FloatConsumed.vue'
 import FloatExpired from './float/FloatExpired.vue'
 import FloatDiscardModal from './float/FloatDiscardModal.vue'
 import DemoPosButton from './demo-controls/DemoPosButton.vue'
+import * as api from '../services/api'
 
 const floatsStore = useFloatStore()
 const authStore = useAuthStore()
@@ -62,24 +63,12 @@ const handleSimulateTap = async () => {
   }
 
   try {
-    // This call blocks on the backend until Stripe webhook fires and the
-    // on-chain tx is sealed — then it returns the real txId.
-    const res = await fetch('http://localhost:3001/api/simulate-tap', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        merchantID: floatsStore.activeTab.id,
-        flowAddress: authStore.user.address,
-        amount: floatsStore.activeTab.floatValue
-      })
+    const { txId } = await api.simulateTap({
+      merchantID: floatsStore.activeTab.id,
+      flowAddress: authStore.user.address,
+      amount: floatsStore.activeTab.floatValue,
     })
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.error || 'Tap simulation failed')
-    }
-
-    const { txId } = await res.json()
     if (!txId) throw new Error('No txId returned from server')
 
     // 30s safety net in case the subscription stalls
