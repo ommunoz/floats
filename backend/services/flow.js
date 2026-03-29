@@ -11,23 +11,19 @@ const FLOW_NETWORK = process.env.FLOW_NETWORK || 'emulator';
 const NETWORK_CONFIG = {
     emulator: {
         accessNode: 'http://127.0.0.1:8888',
-        contractAddress: '0xf8d6e0586b0a20c7',
+        contractAddress: process.env.FLOW_ADMIN_ADDRESS,
         fungibleToken:   '0xee82856bf20e2aa6',
         flowToken:       '0x0ae53cb6e3f42a79',
-        treasuryAddress: '0xf8d6e0586b0a20c7',
-        treasuryKey: () => (process.env.EMULATOR_PRIVATE_KEY || '').replace(/^0x/, '').trim(),
+        treasuryAddress: process.env.FLOW_ADMIN_ADDRESS,
+        treasuryKey: () => (process.env.FLOW_ADMIN_PRIVATE_KEY || '').replace(/^0x/, '').trim(),
     },
     testnet: {
         accessNode: 'https://rest-testnet.onflow.org',
-        contractAddress: '0x407c9218dcdf3589',
+        contractAddress: process.env.FLOW_ADMIN_ADDRESS,
         fungibleToken:   '0x9a0766d93b6608b7',
         flowToken:       '0x7e60df042a9c0868',
-        treasuryAddress: '0x407c9218dcdf3589',
-        treasuryKey: () => {
-            const pkeyPath = path.join(__dirname, '..', '..', 'floats-admin.pkey');
-            if (fs.existsSync(pkeyPath)) return fs.readFileSync(pkeyPath, 'utf8').trim().replace(/^0x/, '');
-            return (process.env.TESTNET_ADMIN_PRIVATE_KEY || '').replace(/^0x/, '').trim();
-        },
+        treasuryAddress: process.env.FLOW_ADMIN_ADDRESS,
+        treasuryKey: () => (process.env.FLOW_ADMIN_PRIVATE_KEY || '').replace(/^0x/, '').trim(),
     },
 };
 
@@ -41,6 +37,10 @@ const FUNGIBLE_TOKEN_ADDRESS = NET.fungibleToken;
 const FLOW_TOKEN_ADDRESS  = NET.flowToken;
 const TREASURY_ADDRESS    = NET.treasuryAddress;
 const TREASURY_PRIVATE_KEY = NET.treasuryKey();
+
+if (!CONTRACT_ADDRESS || !TREASURY_PRIVATE_KEY) {
+    throw new Error(`❌ Missing REQUIRED flow credentials in backend env for network: ${FLOW_NETWORK} (Make sure FLOW_ADMIN_ADDRESS and FLOW_ADMIN_PRIVATE_KEY are properly configured)`);
+}
 
 fcl.config({
     "accessNode.api": NET.accessNode,
