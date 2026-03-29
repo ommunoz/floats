@@ -48,6 +48,8 @@ fcl.config({
     "0xFLOATS_TAB_MANAGER": CONTRACT_ADDRESS,
     "0xFLOW_TOKEN":         FLOW_TOKEN_ADDRESS,
     "0xFUNGIBLE_TOKEN":     FUNGIBLE_TOKEN_ADDRESS,
+    "fcl.limit": 9999,
+    "fcl.sequenceNumberPolicy": "fetch", // Ensure fresh sequence numbers for every JIT transaction
 });
 
 console.log(`[flow.js] Network: ${FLOW_NETWORK.toUpperCase()} | Contract: ${CONTRACT_ADDRESS}`);

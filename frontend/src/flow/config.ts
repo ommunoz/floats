@@ -31,6 +31,8 @@ fcl.config({
   '0xFLOATS_TAB_MANAGER': config.contract,
   '0xFLOW_TOKEN': config.flowToken,
   '0xFUNGIBLE_TOKEN': config.fungibleToken,
+  'fcl.limit': 9999,
+  'fcl.sequenceNumberPolicy': 'fetch'
 })
 
 export const CONTRACT_ADDRESS = config.contract
