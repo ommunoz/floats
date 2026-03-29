@@ -1,5 +1,5 @@
 [
-  { "name": "Omar Muñoz", "isDemoUser": true, "gender": "male", "avatarUrl": "https://api.dicebear.com/9.x/avataaars/svg?seed=Omar%20Mu%C3%B1oz&mouth=smile&hairColor=000000&top=shortFlat&backgroundColor=e9f9e5&accesories=prescription01&clothing=hoodie" },
+  { "name": "Omar Muñoz", "isDemoUser": true, "gender": "male", "avatarUrl": "https://api.dicebear.com/9.x/avataaars/svg?seed=Demo%20User&mouth=smile&hairColor=000000&top=shortFlat&backgroundColor=e9f9e5&accesories=prescription01&clothing=hoodie" },
   { "name": "Sarah Chen", "gender": "female" },
   { "name": "Marcus Aurelius", "gender": "male" },
   { "name": "Bastian Schwein", "gender": "male" },

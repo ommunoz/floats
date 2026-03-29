@@ -4,7 +4,7 @@ const EC = require('elliptic').ec;
 const { execSync } = require('child_process');
 const { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync, readdirSync } = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const ec = new EC('p256');
@@ -19,38 +19,70 @@ if (!existsSync(outputsDir)) {
 const FLOW_NETWORK = process.env.FLOW_NETWORK || 'emulator';
 const IS_TESTNET = FLOW_NETWORK === 'testnet';
 
-const NETWORK_CONFIG = {
-    emulator: {
-        accessNode: 'http://127.0.0.1:8888',
-        serviceAddr: 'f8d6e0586b0a20c7',
-        serviceKey: (process.env.EMULATOR_PRIVATE_KEY || '').replace(/^0x/, '').trim(),
-        FloatsTabManager: 'f8d6e0586b0a20c7',
-        FungibleToken: 'ee82856bf20e2aa6',
-        FlowToken: '0ae53cb6e3f42a79',
-        botFundAmount: '1000.0',
-        cliNetwork: 'emulator',
-    },
-    testnet: {
-        accessNode: 'https://rest-testnet.onflow.org',
-        serviceAddr: '407c9218dcdf3589',
-        serviceKey: (() => {
-            const pkeyPath = path.join(projectRoot, 'floats-admin.pkey');
-            if (existsSync(pkeyPath)) return readFileSync(pkeyPath, 'utf8').trim().replace(/^0x/, '');
-            return (process.env.TESTNET_ADMIN_PRIVATE_KEY || '').replace(/^0x/, '').trim();
-        })(),
-        FloatsTabManager: '407c9218dcdf3589',
-        FungibleToken: '9a0766d93b6608b7',
-        FlowToken: '7e60df042a9c0868',
-        botFundAmount: '10.0',
-        cliNetwork: 'testnet',
-    },
+const flowJsonPath = path.join(projectRoot, 'flow.json');
+const flowJson = JSON.parse(readFileSync(flowJsonPath, 'utf8'));
+
+const getNetworkConfig = (network) => {
+    const isTestnet = network === 'testnet';
+    const cliSigner = isTestnet ? 'floats-admin' : 'emulator-account';
+    
+    const accountConfig = flowJson.accounts[cliSigner];
+    if (!accountConfig) {
+        console.error(`❌ Account "${cliSigner}" not found in flow.json.`);
+        process.exit(1);
+    }
+
+    const serviceAddr = accountConfig.address.replace(/^0x/, '');
+    
+    let serviceKey = '';
+    const envKey = isTestnet ? process.env.TESTNET_ADMIN_PRIVATE_KEY : process.env.EMULATOR_PRIVATE_KEY;
+    if (accountConfig.key && accountConfig.key.type === 'file') {
+        const pkeyPath = path.join(projectRoot, accountConfig.key.location);
+        if (existsSync(pkeyPath)) {
+            serviceKey = readFileSync(pkeyPath, 'utf8').trim().replace(/^0x/, '');
+        }
+    }
+    if (!serviceKey && envKey) {
+        serviceKey = envKey.replace(/^0x/, '').trim();
+    }
+
+    const getAlias = (contractName) => {
+        const c = flowJson.contracts[contractName];
+        if (c && c.aliases && c.aliases[network]) {
+            return c.aliases[network].replace(/^0x/, '');
+        }
+        return '';
+    };
+
+    let FloatsTabManagerAddr = '';
+    if (flowJson.deployments && flowJson.deployments[network]) {
+        for (const [acc, contracts] of Object.entries(flowJson.deployments[network])) {
+            if (contracts.includes('FloatsTabManager')) {
+                FloatsTabManagerAddr = flowJson.accounts[acc].address.replace(/^0x/, '');
+                break;
+            }
+        }
+    }
+
+    return {
+        accessNode: isTestnet ? 'https://rest-testnet.onflow.org' : 'http://127.0.0.1:8888',
+        serviceAddr: serviceAddr,
+        serviceKey: serviceKey,
+        FloatsTabManager: FloatsTabManagerAddr || serviceAddr,
+        FungibleToken: getAlias('FungibleToken'),
+        FlowToken: getAlias('FlowToken'),
+        botFundAmount: isTestnet ? '0.5' : '1000.0',
+        cliNetwork: network,
+        cliSigner: cliSigner,
+    };
 };
 
-const NET = NETWORK_CONFIG[FLOW_NETWORK];
-if (!NET) {
+if (FLOW_NETWORK !== 'emulator' && FLOW_NETWORK !== 'testnet') {
     console.error(`❌ Unknown FLOW_NETWORK: "${FLOW_NETWORK}". Use "emulator" or "testnet".`);
     process.exit(1);
 }
+
+const NET = getNetworkConfig(FLOW_NETWORK);
 
 const SERVICE_ADDR = NET.serviceAddr;
 const SERVICE_KEY = NET.serviceKey;
@@ -125,7 +157,7 @@ async function seed() {
     console.log(`🏛️  Service Account: 0x${SERVICE_ADDR}\n`);
 
     if (IS_TESTNET && !SERVICE_KEY) {
-        console.error('❌ TESTNET_ADMIN_PRIVATE_KEY is not set in backend/.env');
+        console.error('❌ TESTNET_ADMIN_PRIVATE_KEY is not set in seed/.env');
         process.exit(1);
     }
 
@@ -140,13 +172,30 @@ async function seed() {
         }
     }`;
 
-    // 1. Programmatically initialize Bot Actors
-    console.log(`Step 1: Synchronizing & Funding Bot Actors...`);
+    // 1. Programmatically synchronize or initialize Bot Actors
+    console.log(`Step 1: Synchronizing Bot Actors...`);
     const bots = [];
     const usersMap = { [fcl.withPrefix(SERVICE_ADDR)]: { name: "Service Account", isDemoUser: false, gender: "other" } };
 
+    const botKeysPath = path.join(projectRoot, 'seed', 'outputs', `bot_keys_${FLOW_NETWORK}.json`);
+    let savedBots = {};
+    if (IS_TESTNET && existsSync(botKeysPath)) {
+        savedBots = JSON.parse(readFileSync(botKeysPath, 'utf8'));
+    }
+
+    const newSavedBots = { ...savedBots };
+
     for (const meta of actorsMeta) {
-        process.stdout.write(`  🌱 Preparing Bot ${meta.name}... `);
+        process.stdout.write(`  🌱 Checking Bot ${meta.name}... `);
+
+        // Try to reuse existing account credentials to save time/funds
+        if (savedBots[meta.name]) {
+            const bot = savedBots[meta.name];
+            bots.push({ ...meta, addr: bot.addr, key: bot.key });
+            usersMap[bot.addr] = { name: meta.name, isDemoUser: false, gender: meta.gender, avatarUrl: meta.avatarUrl };
+            console.log(`✅ [${bot.addr}] (Reused)`);
+            continue;
+        }
 
         const keyPair = ec.genKeyPair();
         const priv = keyPair.getPrivate('hex');
@@ -154,13 +203,14 @@ async function seed() {
 
         try {
             const output = execSync(
-                `flow accounts create --key ${pub} --network ${NET.cliNetwork} --signer floats-admin`,
+                `flow accounts create --key ${pub} --network ${NET.cliNetwork} --signer ${NET.cliSigner}`,
                 { encoding: 'utf8', stdio: 'pipe', cwd: projectRoot }
             );
             const addrMatch = output.match(/0x[a-fA-F0-9]+/);
             if (!addrMatch) throw new Error("Could not parse address from CLI output");
             const addr = fcl.withPrefix(addrMatch[0]);
 
+            // Just a tiny storage deposit so they exist
             const txId = await fcl.mutate({
                 cadence: fundTx,
                 args: (arg, t) => [arg(addr, t.Address), arg(NET.botFundAmount, t.UFix64)],
@@ -171,22 +221,44 @@ async function seed() {
             });
             await fcl.tx(txId).onceSealed();
 
-            bots.push({ ...meta, addr, key: priv });
+            const botEntry = { addr, key: priv };
+            bots.push({ ...meta, ...botEntry });
+            newSavedBots[meta.name] = botEntry;
             usersMap[addr] = { name: meta.name, isDemoUser: false, gender: meta.gender, avatarUrl: meta.avatarUrl };
-            console.log(`✅ [${addr}] ($${NET.botFundAmount} Loaded)`);
+            console.log(`✅ [${addr}] (Created)`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
         }
     }
 
-    // 1b. Initialize Demo User
+    // Save the new state for next run
+    if (!existsSync(path.dirname(botKeysPath))) mkdirSync(path.dirname(botKeysPath), { recursive: true });
+    writeFileSync(botKeysPath, JSON.stringify(newSavedBots, null, 2));
+
+    // 1b. Initialize or Synchronize Demo User
     console.log(`\nStep 1b: Synchronizing Demo User...`);
+    const demoUserSettingsPath = path.join(projectRoot, 'seed', 'outputs', `demo_user_${FLOW_NETWORK}.json`);
+    let savedDemo = {};
+    if (IS_TESTNET && existsSync(demoUserSettingsPath)) {
+        savedDemo = JSON.parse(readFileSync(demoUserSettingsPath, 'utf8'));
+    }
+
     const demoUserActors = [];
     const demoAdminKeys = {};
     const demoManagedCards = {};
 
     for (const meta of demoUsersMeta) {
         process.stdout.write(`  🌟 Preparing Demo User ${meta.name}... `);
+        
+        if (savedDemo[meta.name]) {
+            const d = savedDemo[meta.name];
+            demoUserActors.push({ ...meta, addr: d.addr, key: d.key });
+            demoAdminKeys[d.addr] = d.key;
+            demoManagedCards[d.addr] = d.cardId;
+            usersMap[d.addr] = { name: meta.name, isDemoUser: true, stripeCardId: d.cardId, gender: meta.gender, avatarUrl: meta.avatarUrl };
+            console.log(`✅ [${d.addr}] (Reused + Card: ${d.cardId})`);
+            continue;
+        }
 
         const keyPair = ec.genKeyPair();
         const priv = keyPair.getPrivate('hex');
@@ -194,7 +266,7 @@ async function seed() {
 
         try {
             const output = execSync(
-                `flow accounts create --key ${pub} --network ${NET.cliNetwork} --signer floats-admin`,
+                `flow accounts create --key ${pub} --network ${NET.cliNetwork} --signer ${NET.cliSigner}`,
                 { encoding: 'utf8', stdio: 'pipe', cwd: projectRoot }
             );
             const addrMatch = output.match(/0x[a-fA-F0-9]+/);
@@ -211,7 +283,7 @@ async function seed() {
             });
             await fcl.tx(txId).onceSealed();
 
-            console.log(`\n  💳 Issuing Stripe Card for ${meta.name}...`);
+            console.log(`\n    💳 Issuing Stripe Card for ${meta.name}...`);
             const cardholder = await stripe.issuing.cardholders.create({
                 name: meta.name,
                 email: `${meta.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
@@ -228,17 +300,19 @@ async function seed() {
                 metadata: { flowAddress: addr }
             });
 
-            demoUserActors.push({ ...meta, addr, key: priv, stripeCardId: card.id });
-            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id, gender: meta.gender, avatarUrl: meta.avatarUrl };
+            savedDemo[meta.name] = { addr, key: priv, cardId: card.id };
+            demoUserActors.push({ ...meta, addr, key: priv });
             demoAdminKeys[addr] = priv;
             demoManagedCards[addr] = card.id;
-            console.log(`  ✅ Demo [${addr}] ($${NET.botFundAmount} Loaded + Card Issued: ${card.id})`);
+            usersMap[addr] = { name: meta.name, isDemoUser: true, stripeCardId: card.id, gender: meta.gender, avatarUrl: meta.avatarUrl };
+            console.log(`    ✅ [${addr}] (Created + Card: ${card.id})`);
         } catch (e) {
             console.log(`❌ ERROR: ${e.message}`);
         }
     }
+    writeFileSync(demoUserSettingsPath, JSON.stringify(savedDemo, null, 2));
 
-    writeFileSync(path.join(outputsDir, 'users.json'), JSON.stringify(usersMap, null, 2));
+    writeFileSync(path.join(outputsDir, `users_${FLOW_NETWORK}.json`), JSON.stringify(usersMap, null, 2));
 
     // 2. Initialize Merchant Tabs
     console.log(`\nStep 2: Initializing Merchant Tabs...`);
@@ -262,9 +336,9 @@ async function seed() {
         }
     }
 
-    // 3. Generating Organic Activity
-    console.log(`\nStep 3: Generating Organic Activity...`);
-    const depositTx = getCadence('transactions/deposit_to_tab.cdc');
+    // 3. Generating Organic Activity (PARALLEL ENGINE)
+    console.log(`\nStep 3: Generating Organic Activity (Parallel Engine Activated)...`);
+    const depositTx = getCadence('transactions/fund_tab.cdc');
     const claimTx = getCadence('transactions/claim_float.cdc');
     const consumeTx = getCadence('transactions/consume_float.cdc');
 
@@ -272,82 +346,79 @@ async function seed() {
         if (!tab.seedData) continue;
         const toClaim = tab.seedData.grabsToSimulate || 0;
         const currentAvail = tab.seedData.fundsToSimulate || 0;
-
         if (toClaim === 0 && currentAvail === 0) continue;
 
-        console.log(`  👉 Activity for ${tab.merchantName}:`);
+        console.log(`\n  🏎️  Starting High-Speed Simulation for ${tab.merchantName}:`);
 
+        // --- 1. Interleaved Logic for Natural History ---
         let actions = [];
-        const totalNeeded = toClaim + currentAvail;
+        const toFund = toClaim + currentAvail;
         let fundedSoFar = 0;
-
-        while (fundedSoFar < totalNeeded) {
-            const remaining = totalNeeded - fundedSoFar;
-            const chunkSize = Math.min(remaining, Math.floor(Math.random() * 4) + 1);
+        while (fundedSoFar < toFund) {
+            const chunkSize = Math.min(toFund - fundedSoFar, Math.floor(Math.random() * 4) + 1);
             actions.push({ type: 'fund', count: chunkSize });
             fundedSoFar += chunkSize;
-
+            // Interleave a claim every couple of fundings for the "vibe"
             if (actions.length % 2 === 0 && actions.filter(a => a.type === 'claim').length < toClaim) {
                 actions.push({ type: 'claim' });
             }
         }
-
-        const currentClaims = actions.filter(a => a.type === 'claim').length;
-        for (let i = 0; i < (toClaim - currentClaims); i++) {
-            const pos = Math.floor(Math.random() * (actions.length - 1)) + 1;
-            actions.splice(pos, 0, { type: 'claim' });
+        // Fill remaining claims
+        const currentClaimsCount = actions.filter(a => a.type === 'claim').length;
+        for (let i = 0; i < (toClaim - currentClaimsCount); i++) {
+            actions.splice(Math.floor(Math.random() * actions.length), 0, { type: 'claim' });
         }
 
-        for (const action of actions) {
-            const actor = bots[Math.floor(Math.random() * bots.length)];
-            const value = tab.floatValue.toFixed(8);
+        // --- 2. Parallel Batching Logic ---
+        console.log(`    📦 Simulating community activity in parallel streams...`);
+        for (let i = 0; i < actions.length; i += 5) {
+            const batch = actions.slice(i, i + 5);
+            await Promise.all(batch.map(async (action, index) => {
+                const actor = bots[index % bots.length];
+                const value = tab.floatValue.toFixed(8);
+                const actorAuth = authz(actor.addr, actor.key);
 
-            try {
-                if (action.type === 'fund') {
-                    const amount = (action.count * tab.floatValue).toFixed(8);
-                    process.stdout.write(`    💰 ${actor.name} funding $${parseFloat(amount).toFixed(0)}... `);
-                    const txId = await fcl.mutate({
-                        cadence: depositTx,
-                        args: (arg, t) => [
-                            arg(tab.id, t.String),
-                            arg(actor.addr, t.Address),
-                            arg(amount, t.UFix64)
-                        ],
-                        proposer: authz(actor.addr, actor.key),
-                        payer: authz(actor.addr, actor.key),
-                        authorizations: [authz(actor.addr, actor.key)],
-                        limit: 1000
-                    });
-                    await fcl.tx(txId).onceSealed();
-                    console.log(`✅`);
-                } else {
-                    process.stdout.write(`    🏷️  ${actor.name} claiming $${parseFloat(value).toFixed(0)}... `);
-                    const actorAuth = authz(actor.addr, actor.key);
+                try {
+                    if (action.type === 'fund') {
+                        const amount = (action.count * tab.floatValue).toFixed(8);
+                        const fundTx = await fcl.mutate({
+                            cadence: depositTx,
+                            args: (arg, t) => [arg(tab.id, t.String), arg(actor.addr, t.Address), arg(amount, t.UFix64)],
+                            proposer: actorAuth,
+                            payer: serviceAuth,
+                            authorizations: [serviceAuth],
+                            limit: 1000
+                        });
+                        await fcl.tx(fundTx).onceSealed();
+                        console.log(`      ✅  ${actor.name} funded $${parseFloat(amount).toFixed(0)}`);
+                    } else {
+                        // Tiny delay for claims in the same batch to prevent race conditions
+                        await new Promise(r => setTimeout(r, 1000));
+                        const claimTxId = await fcl.mutate({
+                            cadence: claimTx,
+                            args: (arg, t) => [arg(tab.id, t.String), arg(value, t.UFix64)],
+                            proposer: actorAuth,
+                            payer: serviceAuth,
+                            authorizations: [actorAuth],
+                            limit: 1000
+                        });
+                        await fcl.tx(claimTxId).onceSealed();
 
-                    const claimTxId = await fcl.mutate({
-                        cadence: claimTx,
-                        args: (arg, t) => [arg(tab.id, t.String), arg(value, t.UFix64)],
-                        proposer: actorAuth,
-                        payer: actorAuth,
-                        authorizations: [actorAuth],
-                        limit: 1000
-                    });
-                    await fcl.tx(claimTxId).onceSealed();
-
-                    const consumeTxId = await fcl.mutate({
-                        cadence: consumeTx,
-                        args: (arg, t) => [arg(tab.id, t.String), arg(value, t.UFix64)],
-                        proposer: actorAuth,
-                        payer: actorAuth,
-                        authorizations: [actorAuth],
-                        limit: 1000
-                    });
-                    await fcl.tx(consumeTxId).onceSealed();
-                    console.log(`✅`);
+                        await fcl.mutate({
+                            cadence: consumeTx,
+                            args: (arg, t) => [arg(tab.id, t.String), arg(value, t.UFix64)],
+                            proposer: actorAuth,
+                            payer: serviceAuth,
+                            authorizations: [actorAuth],
+                            limit: 1000
+                        }).then(tx => fcl.tx(tx).onceSealed());
+                        
+                        console.log(`      ✅  ${actor.name} grabbed a $${parseFloat(value).toFixed(0)} float`);
+                    }
+                } catch (e) {
+                    console.error(`      ❌ Activity failed for ${actor.name}: ${e.message}`);
                 }
-            } catch (e) {
-                console.log(`❌ ERROR: ${e.message}`);
-            }
+            }));
         }
     }
 
@@ -391,8 +462,8 @@ async function seed() {
         mkdirSync(backendDataDir, { recursive: true });
     }
 
-    writeFileSync(path.join(outputsDir, 'managed_keys.json'), JSON.stringify(demoAdminKeys, null, 2));
-    writeFileSync(path.join(outputsDir, 'managed_cards.json'), JSON.stringify(demoManagedCards, null, 2));
+    writeFileSync(path.join(outputsDir, `managed_keys_${FLOW_NETWORK}.json`), JSON.stringify(demoAdminKeys, null, 2));
+    writeFileSync(path.join(outputsDir, `managed_cards_${FLOW_NETWORK}.json`), JSON.stringify(demoManagedCards, null, 2));
 
     writeFileSync(path.join(backendDataDir, 'managed_keys.json'), JSON.stringify(demoAdminKeys, null, 2));
     writeFileSync(path.join(backendDataDir, 'managed_cards.json'), JSON.stringify(demoManagedCards, null, 2));
