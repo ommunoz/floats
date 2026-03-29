@@ -24,14 +24,12 @@ export const useTabsStore = defineStore('tabs', () => {
 
   async function loadTabsData() {
     try {
-      const response = await fetch('/src/data/tabs.json')
-      if (response.ok) {
-        tabs.value = await response.json()
-        isInitialized.value = true
-        await refreshBalances()
-      }
+      const data = await import('../data/tabs.json')
+      tabs.value = data.default || data
+      isInitialized.value = true
+      await refreshBalances()
     } catch (e) {
-      console.warn("Could not load tabs.json fallback.")
+      console.warn("Could not load tabs.json fallback.", e)
     }
   }
 

@@ -1,3 +1,5 @@
+import usersDataRaw from '../data/users.json'
+
 interface UserIdentity {
   name: string
   isDemoUser: boolean
@@ -5,10 +7,15 @@ interface UserIdentity {
   avatarUrl?: string
 }
 
-let users: Record<string, UserIdentity> = {}
+const users: Record<string, UserIdentity> = usersDataRaw as any
 
-export function setUsersData(data: Record<string, UserIdentity>) {
-  users = data
+export function getDemoUser(): { address: string; name: string } | null {
+  for (const [address, meta] of Object.entries(users)) {
+    if (meta.isDemoUser) {
+      return { address, name: meta.name }
+    }
+  }
+  return null
 }
 
 export function getDisplayName(address: string): string {

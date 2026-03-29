@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { setUsersData } from '../utils/demoIdentities'
+import { getDemoUser } from '../utils/demoIdentities'
 
 export interface DemoUser {
   address: string
@@ -14,30 +14,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   const loadDemoUser = async () => {
     try {
-      // Import directly for type safety and build reliability
-      const data = await import('../data/users.json')
-      const users = data.default || data
-      
-      setUsersData(users)
-      
-      // Look for the user explicitly tagged by the seeder
-      for (const [address, meta] of Object.entries(users)) {
-         const m = meta as { name: string, isDemoUser: boolean }
-         if (m.isDemoUser) {
-           user.value = {
-             address,
-             name: m.name
-           }
-           break
-         }
-      }
-
-      if (!user.value) {
+      const demo = getDemoUser()
+      if (demo) {
+        user.value = demo
+      } else {
         console.warn("No user with isDemoUser: true found in users.json")
         hasSetupError.value = true
       }
     } catch (e) {
-      console.error("Could not load users.json:", e)
+      console.error("Could not load users:", e)
       hasSetupError.value = true
     } finally {
       isLoaded.value = true
