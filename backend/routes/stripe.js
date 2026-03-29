@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { registerPendingTap, cancelPendingTap } = require('../lib/tapRegistry');
 const { registerPendingDeposit, cancelPendingDeposit } = require('../lib/depositRegistry');
+const { loadJsonData } = require('../lib/config');
 
 // Helper to get Stripe instance lazily
 const getStripe = () => {
@@ -74,18 +75,8 @@ router.post('/simulate-tap', async (req, res) => {
         let cardId = null;
 
         const getManagedCards = () => {
-            if (process.env.MANAGED_CARDS) {
-                try {
-                    return JSON.parse(process.env.MANAGED_CARDS);
-                } catch (e) {
-                    console.error("❌ Failed to parse MANAGED_CARDS env var:", e);
-                }
-            }
             const managedCardsPath = path.join(__dirname, '..', 'data', 'managed_cards.json');
-            if (fs.existsSync(managedCardsPath)) {
-                return JSON.parse(fs.readFileSync(managedCardsPath, 'utf8'));
-            }
-            return {};
+            return loadJsonData('MANAGED_CARDS', managedCardsPath, {});
         };
 
         const managedCards = getManagedCards();

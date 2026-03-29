@@ -3,6 +3,7 @@ const { SHA3 } = require('sha3');
 const EC = require('elliptic').ec;
 const fs = require('fs');
 const path = require('path');
+const { loadJsonData } = require('../lib/config');
 
 // --- Network Config ---
 const FLOW_NETWORK = process.env.FLOW_NETWORK || 'emulator';
@@ -142,26 +143,8 @@ async function checkFloatIsValid(claimerAddress) {
 }
 
 const getManagedKeys = () => {
-    // 1. Try Environment Variable (Railway priority)
-    if (process.env.MANAGED_KEYS) {
-        try {
-            return JSON.parse(process.env.MANAGED_KEYS);
-        } catch (e) {
-            console.error("❌ Failed to parse MANAGED_KEYS env var:", e);
-        }
-    }
-
-    // 2. Fallback to Local Filesystem
     const keysPath = path.join(__dirname, '..', 'data', 'managed_keys.json');
-    if (fs.existsSync(keysPath)) {
-        try {
-            return JSON.parse(fs.readFileSync(keysPath, 'utf8'));
-        } catch (e) {
-            console.error("❌ Failed to parse managed_keys.json file:", e);
-        }
-    }
-
-    return {};
+    return loadJsonData('MANAGED_KEYS', keysPath, {});
 };
 
 async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
@@ -170,17 +153,18 @@ async function consumeFloatJIT(tabID, claimerAddress, spentAmount) {
     const normalized = claimerAddress.startsWith('0x') ? claimerAddress : `0x${claimerAddress}`;
     const userKey = managedKeys[normalized] || managedKeys[claimerAddress] || null;
 
+    console.log(`[flow.js] consumeFloatJIT: address=${claimerAddress}, normalized=${normalized}, keyFound=${!!userKey}, keysAvailable=${Object.keys(managedKeys).length}`);
+
     if (!userKey) throw new Error(`No managed key found for address: ${claimerAddress}`);
 
     // Submit the transaction but don't wait for the SEAL here
     const txId = await fcl.mutate({
         cadence: CADENCE_JIT_CONSUME,
         args: (arg, t) => [arg(tabID, t.String), arg(formattedAmount, t.UFix64)],
-        proposer: fcl.authz,
-        payer: fcl.authz,
+        proposer: authorizationFunction,
+        payer: authorizationFunction,
         authorizations: [
-            fcl.authz,
-            signer(normalized, userKey)
+            createAuthFunction(normalized, userKey)
         ],
         limit: 9999
     });
