@@ -90,13 +90,17 @@ onUnmounted(() => {
 
 const sortedSponsors = computed(() => {
   return Object.entries(leaderboard.value)
-    .map(([address, stats]) => ({
-      address,
-      name: getDisplayName(address),
-      email: `${getDisplayName(address).split(' ')[0].toLowerCase()}@email.com`,
-      amount: stats.totalFunded,
-      tier: stats.tier
-    }))
+    .map(([address, stats]) => {
+      const name = getDisplayName(address);
+      const firstName = name.split(' ')[0] || 'patron';
+      return {
+        address,
+        name,
+        email: `${firstName.toLowerCase()}@email.com`,
+        amount: stats.totalFunded,
+        tier: stats.tier
+      }
+    })
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5)
 })
