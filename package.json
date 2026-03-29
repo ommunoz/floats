@@ -17,10 +17,8 @@
   "dependencies": {
     "@onflow/fcl": "^1.21.9",
     "@onflow/fcl-bundle": "^1.7.1",
-    "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "elliptic": "^6.6.1",
-    "express": "^5.2.1",
     "sha3": "^2.1.4",
     "stripe": "^20.4.0"
   },
