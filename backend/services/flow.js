@@ -131,10 +131,12 @@ const SCRIPT_GET_ACTIVE_FLOAT = loadScript('get_active_float');
 
 async function checkFloatIsValid(claimerAddress) {
     try {
+        console.log(`[flow.js] checkFloatIsValid: Querying status for ${claimerAddress}...`);
         const result = await fcl.query({
             cadence: SCRIPT_GET_ACTIVE_FLOAT,
             args: (arg, t) => [arg(claimerAddress, t.Address)]
         });
+        console.log(`[flow.js] checkFloatIsValid: Result for ${claimerAddress}:`, result);
         return !!result;
     } catch (e) {
         console.error("❌ FCL Query failed for checkFloatIsValid:", e);
@@ -239,4 +241,4 @@ async function depositToTab(tabID, funderAddress, amountAmount) {
     return transactionId;
 }
 
-module.exports = { consumeFloatJIT, claimFloat, discardFloat, depositToTab };
+module.exports = { consumeFloatJIT, claimFloat, discardFloat, depositToTab, checkFloatIsValid };

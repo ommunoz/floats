@@ -1,19 +1,21 @@
 import FloatsTabManager from 0xFLOATS_TAB_MANAGER
 
-pub fun main(address: Address): {String: AnyStruct}? {
+access(all) fun main(address: Address): {String: AnyStruct}? {
     let account = getAccount(address)
     
-    let activeFloat = account.getCapability(/public/FloatReceiptPublic)
-        .borrow<&{FloatsTabManager.ReceiptPublic}>()
-        ?? return nil
-
-    if (activeFloat.expiresAt < getCurrentBlock().timestamp) {
-        return nil
+    // Attempt to read the Physical Ticket using the Public Capability
+    let receiptRef = account.capabilities.borrow<&FloatsTabManager.FloatReceipt>(/public/FloatReceiptPublic)
+    
+    if let ref = receiptRef {
+        // Only return if it's NOT expired
+        if ref.expiresAt >= getCurrentBlock().timestamp {
+            return {
+                "tabID": ref.tabID,
+                "amount": ref.amount,
+                "expiresAt": ref.expiresAt
+            }
+        }
     }
-
-    return {
-        "amount": activeFloat.amount,
-        "expiresAt": activeFloat.expiresAt,
-        "tabID": activeFloat.tabID
-    }
+    
+    return nil
 }
