@@ -179,7 +179,7 @@ access(all) contract FloatsTabManager {
 
         // 3. Process Yield on the prior Idle Principal
         let oldIdlePrincipal = tab.getAvailableBalance()
-        let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + amount)
+        let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + amount)
         tab.updateYield(yieldVaultAccrued: accrued)
 
         // 4. Update Explicit Ledger
@@ -254,7 +254,7 @@ access(all) contract FloatsTabManager {
                 
                 // Process Yield before touching principal
                 let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + expiredData.amount)
+                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + expiredData.amount)
                 tab.updateYield(yieldVaultAccrued: accrued)
 
                 // Free the pending funds back to the idle pool
@@ -267,7 +267,7 @@ access(all) contract FloatsTabManager {
 
         // 1. Process Yield before locking principal
         let oldIdlePrincipal = tab.getAvailableBalance()
-        let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal - amount)
+        let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal - amount)
         tab.updateYield(yieldVaultAccrued: accrued)
 
         // 2. Lock Funds inside the explicit Pending ledger
@@ -296,7 +296,7 @@ access(all) contract FloatsTabManager {
             if let floatData = tab.activeFloats[claimerAddress] {
                 // Return funds to the idle pool
                 let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + floatData.amount)
+                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + floatData.amount)
                 tab.updateYield(yieldVaultAccrued: accrued)
                 
                 tab.deductPending(floatData.amount)
@@ -336,13 +336,16 @@ access(all) contract FloatsTabManager {
 
         // 3. Yield Processing: Idle Capital increases by unspent change
         let oldIdlePrincipal = tab.getAvailableBalance()
-        let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + unspent)
+        let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + unspent)
         tab.updateYield(yieldVaultAccrued: accrued)
 
         // 4. Update Explicit Ledgers
         tab.deductPending(floatData.amount)
         tab.addConsumed(spentAmount)
         tab.addReimbursement(spentAmount)
+
+        // 5. Accrue the spent amount to the Protocol's earning pool
+        YieldVault.addProtocolPrincipal(amount: spentAmount)
 
         // 5. Update Metrics
         tab.incRedemptions()
@@ -371,7 +374,7 @@ access(all) contract FloatsTabManager {
             var tab = self.tabs[tabID]!
             if let floatData = tab.activeFloats[claimerAddress] {
                 let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + floatData.amount)
+                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + floatData.amount)
                 tab.updateYield(yieldVaultAccrued: accrued)
                 
                 tab.deductPending(floatData.amount)
@@ -397,7 +400,7 @@ access(all) contract FloatsTabManager {
 
             if totalReclaimed > 0.0 {
                 let oldIdlePrincipal = tab.getAvailableBalance()
-                let accrued = YieldVault.updatePrincipal(merchantID: tab.merchantID, newPrincipal: oldIdlePrincipal + totalReclaimed)
+                let accrued = YieldVault.updatePrincipal(tabID: tabID, newPrincipal: oldIdlePrincipal + totalReclaimed)
                 tab.updateYield(yieldVaultAccrued: accrued)
                 
                 tab.deductPending(totalReclaimed)
