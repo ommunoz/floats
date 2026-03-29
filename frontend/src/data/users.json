@@ -1,38 +1,39 @@
 {
-  "0xf8d6e0586b0a20c7": {
+  "0x407c9218dcdf3589": {
     "name": "Service Account",
     "isDemoUser": false,
     "gender": "other"
   },
-  "0x179b6b1cb6755e31": {
+  "0x35fb29a193ef6c16": {
     "name": "Sarah Chen",
     "isDemoUser": false,
     "gender": "female"
   },
-  "0xf3fcd2c1a78f5eee": {
+  "0xc7c8f54f1b1166a8": {
     "name": "Marcus Aurelius",
     "isDemoUser": false,
     "gender": "male"
   },
-  "0xe03daebed8ca0615": {
+  "0x23af4c920aeb6677": {
     "name": "Bastian Schwein",
     "isDemoUser": false,
     "gender": "male"
   },
-  "0x045a1763c93006ca": {
+  "0x28857e0bc66e185e": {
     "name": "Toby Flenderson",
     "isDemoUser": false,
     "gender": "male"
   },
-  "0x120e725050340cab": {
+  "0x3ed11b385f6a123f": {
     "name": "Elena Gilbert",
     "isDemoUser": false,
     "gender": "female"
   },
-  "0xf669cb8d41ce0c74": {
+  "0xc50279e96835a204": {
     "name": "Demo User",
     "isDemoUser": true,
-    "stripeCardId": "ic_1TG9r6HprA4pRoyud5UlIixH",
-    "gender": "other"
+    "stripeCardId": "ic_1TGDNqHprA4pRoyupcZcfk2C",
+    "gender": "other",
+    "avatarUrl": "https://api.dicebear.com/9.x/avataaars/svg?seed=Demo%20User&mouth=smile&hairColor=000000&top=shortFlat&backgroundColor=e9f9e5&accesories=prescription01&clothing=hoodie"
   }
 }
