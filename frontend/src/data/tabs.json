@@ -1,0 +1,57 @@
+[
+  {
+    "id": "neighborhood-cafe-01",
+    "merchantId": "merch_neighborhood_cafe",
+    "merchantName": "The Neighborhood Cafe",
+    "coverImage": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80",
+    "address": "123 Bleecker St, New York, NY 10014",
+    "lat": 40.7291,
+    "lng": -73.9993,
+    "floatValue": 5,
+    "merchantLogo": "/merchant-logos/neighborhood-cafe-01.png"
+  },
+  {
+    "id": "corner-bakers-01",
+    "merchantId": "merch_corner_bakers",
+    "merchantName": "Corner Bakers",
+    "coverImage": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&q=80",
+    "address": "250 8th Ave, New York, NY 10011",
+    "lat": 40.7458,
+    "lng": -73.9984,
+    "floatValue": 5,
+    "merchantLogo": "/merchant-logos/corner-bakers-01.png"
+  },
+  {
+    "id": "civic-brew-01",
+    "merchantId": "merch_civic_brew",
+    "merchantName": "Civic Brew",
+    "coverImage": "https://images.unsplash.com/photo-1584225064536-d0fbc0a10f18?w=800&q=80",
+    "address": "150 Spring St, New York, NY 10012",
+    "lat": 40.7252,
+    "lng": -74.0011,
+    "floatValue": 5,
+    "merchantLogo": "/merchant-logos/civic-brew-01.png"
+  },
+  {
+    "id": "plaza-taqueria-01",
+    "merchantId": "merch_plaza_taqueria",
+    "merchantName": "Plaza Taqueria",
+    "coverImage": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&q=80",
+    "address": "130 Bedford Ave, Brooklyn, NY 11211",
+    "lat": 40.7181,
+    "lng": -73.9572,
+    "floatValue": 5,
+    "merchantLogo": "/merchant-logos/plaza-taqueria-01.png"
+  },
+  {
+    "id": "good-news-books-01",
+    "merchantId": "merch_good_news_books",
+    "merchantName": "Good News Books",
+    "coverImage": "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800&q=80",
+    "address": "180 Manhattan Ave, Brooklyn, NY 11222",
+    "lat": 40.7226,
+    "lng": -73.9442,
+    "floatValue": 5,
+    "merchantLogo": "/merchant-logos/good-news-books-01.png"
+  }
+]

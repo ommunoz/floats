@@ -1,0 +1,39 @@
+{
+  "0xf8d6e0586b0a20c7": {
+    "name": "Service Account",
+    "isDemoUser": false,
+    "gender": "other"
+  },
+  "0x179b6b1cb6755e31": {
+    "name": "Sarah Chen",
+    "isDemoUser": false,
+    "gender": "female"
+  },
+  "0xf3fcd2c1a78f5eee": {
+    "name": "Marcus Aurelius",
+    "isDemoUser": false,
+    "gender": "male"
+  },
+  "0xe03daebed8ca0615": {
+    "name": "Bastian Schwein",
+    "isDemoUser": false,
+    "gender": "male"
+  },
+  "0x045a1763c93006ca": {
+    "name": "Toby Flenderson",
+    "isDemoUser": false,
+    "gender": "male"
+  },
+  "0x120e725050340cab": {
+    "name": "Elena Gilbert",
+    "isDemoUser": false,
+    "gender": "female"
+  },
+  "0xf669cb8d41ce0c74": {
+    "name": "Omar Muñoz",
+    "isDemoUser": true,
+    "stripeCardId": "ic_1TG9r6HprA4pRoyud5UlIixH",
+    "gender": "male",
+    "avatarUrl": "https://api.dicebear.com/9.x/avataaars/svg?seed=Omar%20Mu%C3%B1oz&mouth=smile&hairColor=000000&top=shortFlat&backgroundColor=e9f9e5&accesories=prescription01&clothing=hoodie"
+  }
+}
