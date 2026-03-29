@@ -1,12 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 const { consumeFloatJIT, depositToTab } = require('../services/flow');
 const { resolvePendingTap, rejectPendingTap } = require('../lib/tapRegistry');
 const { resolvePendingDeposit, rejectPendingDeposit } = require('../lib/depositRegistry');
 
 // This endpoint receives all webhooks from the Stripe Dashboard
 router.post('/stripe', async (req, res) => {
+    const STRIPE_KEY = process.env.STRIPE_SECRET_KEY;
+    if (!STRIPE_KEY) {
+        console.error("❌ ERROR: STRIPE_SECRET_KEY is missing from environment variables!");
+        return res.status(500).send("Stripe Secret Key not configured.");
+    }
+    const stripe = require('stripe')(STRIPE_KEY);
+    
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 

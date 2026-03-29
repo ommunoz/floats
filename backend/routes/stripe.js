@@ -1,10 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 const path = require('path');
 const fs = require('fs');
 const { registerPendingTap, cancelPendingTap } = require('../lib/tapRegistry');
 const { registerPendingDeposit, cancelPendingDeposit } = require('../lib/depositRegistry');
+
+// Helper to get Stripe instance lazily
+const getStripe = () => {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error("STRIPE_SECRET_KEY is missing from environment.");
+    return require('stripe')(key);
+};
 
 router.post('/wait-for-deposit', async (req, res) => {
     try {
@@ -30,6 +37,7 @@ router.post('/create-payment-intent', async (req, res) => {
         }
 
         // Create a PaymentIntent with the order amount and currency
+        const stripe = getStripe();
         const paymentIntent = await stripe.paymentIntents.create({
             amount: amount, // amount in cents
             currency: 'usd',
@@ -105,6 +113,7 @@ router.post('/simulate-tap', async (req, res) => {
         // so the webhook can resolve it even if it arrives very fast.
         const tapPromise = registerPendingTap(flowAddress);
 
+        const stripe = getStripe();
         const auth = await stripe.testHelpers.issuing.authorizations.create({
             amount: centsAmount,
             currency: 'usd',

@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ override: false });
 
 const app = express();
 const port = process.env.PORT || 3001;
