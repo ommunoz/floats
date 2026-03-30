@@ -138,6 +138,6 @@ access(all) contract YieldVault {
     init() {
         self.tabYields = {}
         self.protocolYield = ProtocolYieldRecord()
-        self.ACCELERATOR_FACTOR = 500.0
+        self.ACCELERATOR_FACTOR = 1.0
     }
 }
