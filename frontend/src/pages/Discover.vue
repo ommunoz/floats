@@ -20,6 +20,7 @@ const auth = useAuthStore()
         <!-- Left: Wordmark -->
         <div class="wordmark-container">
           <RouterLink to="/" class="wordmark-link">
+            <img src="/floats-icon.svg" alt="Floats Icon" class="wordmark-icon" />
             floats
           </RouterLink>
         </div>
@@ -120,17 +121,33 @@ const auth = useAuthStore()
 .wordmark-container {
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
 .wordmark-link {
-  font-size: 1.25rem; /* Increased from 1.125rem */
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--floats-navy);
-  letter-spacing: 0.025em;
+  letter-spacing: -0.5px;
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.5rem;
   text-decoration: none;
+
+  @media (min-width: 768px) {
+    font-size: 1.5rem;
+  }
+}
+
+.wordmark-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+
+  @media (min-width: 768px) {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
 }
 
 .nav-pill-group {
@@ -164,6 +181,8 @@ const auth = useAuthStore()
 .avatar-container {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex: 1;
 }
 
 .avatar-link {
