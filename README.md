@@ -3,6 +3,8 @@
 **The Community Growth Engine for Local Business.**\
 _Powered by Programmable Spend on Flow._
 
+[**View Pitch Deck**](https://docs.google.com/presentation/d/1fo4XsUKvoCzfqNwwiAtGZzU5a9Y_L2IrzI7-wVq7b60/)
+
 Floats turns community support into measurable, in-store foot traffic. Patrons
 fund a tab at a local business — neighbors draw from it with a phone tap. No
 wallet, no friction at checkout.
@@ -27,7 +29,8 @@ infrastructure to convert that support into measurable foot traffic.
    credit card.
 2. **A neighbor discovers the tab**, visits the location, and claims a Float — a
    spend credit up to a fixed amount.
-3. **They tap to pay at the register** using their issued Floats virtual card.
+3. **They tap to pay at the register** using their Stripe-issued Floats virtual
+   card.
 4. **The merchant receives a standard card payment.** No new hardware, no app,
    no integration of any kind.
 
@@ -44,8 +47,8 @@ consumed and destroyed. Authorization happens Just-In-Time at checkout.
 
 - **No double-spend** — a consumed Float is destroyed. It cannot be presented
   again because it no longer exists.
-- **Merchant lock** — the Float is bound to a specific `merchantID` at creation.
-  A mismatch at consumption reverts the transaction.
+- **Merchant lock** — the Float is bound to a specific merchant location at
+  creation. A mismatch at consumption reverts the transaction.
 - **Expiry** — each Float carries a 15-minute TTL (`expiresAt` block timestamp).
   Expired Floats cannot be consumed; their value is returned to the tab.
 - **Spend ceiling** — the Float's `maxAmount` caps the transaction. Any unused
