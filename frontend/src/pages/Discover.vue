@@ -15,6 +15,12 @@ const auth = useAuthStore()
   <div :class="['discover-page', { 'is-map-view': store.discoverView === 'map' }]">
     <!-- Top Navigation Bar natively within Discover -->
     <header class="app-header">
+      <!-- Persistent Merchant Topbar -->
+      <RouterLink to="/merchant" class="merchant-topbar">
+        <span>Check out the Merchant experience:</span>
+        <span class="topbar-action">Go to Live Dashboard &rarr;</span>
+      </RouterLink>
+
       <div class="header-container">
         
         <!-- Left: Wordmark -->
@@ -39,7 +45,7 @@ const auth = useAuthStore()
            >Map</span>
         </div>
 
-        <!-- Right: Profile Avatar Link -->
+        <!-- Right: Actions & Profile -->
         <div class="avatar-container">
           <RouterLink to="/profile" class="avatar-link">
             <BaseAvatar :src="getAvatarUrl(auth.user?.address || 'user-01')" size="md" />
@@ -98,6 +104,29 @@ const auth = useAuthStore()
 }
 
 /* Header Styles ported closely from previous App.vue */
+.merchant-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--floats-navy);
+  color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.merchant-topbar:hover {
+  background-color: #1e293b; /* Slightly lighter navy */
+}
+
+.topbar-action {
+  font-weight: 700;
+  color: var(--floats-teal);
+}
+
 .app-header {
   position: sticky;
   top: 0;
